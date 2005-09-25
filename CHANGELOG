@@ -2,6 +2,9 @@
 Backport Changes since U-Boot 1.1.2:
 ======================================================================
 
+* Update ARM mach-types.h
+  Patch by Eric Benard, 07 Apr 2005
+
 * ARM: compiler options cleanup - improve tool chain support
 
   For some time there have been repeated reports about build problems
