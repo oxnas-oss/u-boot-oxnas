@@ -1,4 +1,13 @@
 ======================================================================
+Backport Changes since U-Boot 1.1.2:
+======================================================================
+
+* Make sure only supported compiler options are used
+  Import "cc-option" shell function from kernel and
+  use it to get the correct ARM GCC options for individual CPUs
+  Patch by Peter Pearse, 30 Jun 2005
+
+======================================================================
 Changes for U-Boot 1.1.2:
 ======================================================================
 
