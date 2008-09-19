@@ -2,6 +2,9 @@
 Backport Changes since U-Boot 1.1.2:
 ======================================================================
 
+* Remove compiler warning: target CPU does not support interworking.
+  This warning is issued by modern ARM-EABI GCC on non-thumb targets.
+
 * Remove redundant armv4 flag from arm926ejs compile flags.
   Currently the arm926ejs tree has the armv4 option set during
   compilation. This flag does not belong here because a arm926
