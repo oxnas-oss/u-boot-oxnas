@@ -2,6 +2,11 @@
 Backport Changes since U-Boot 1.1.2:
 ======================================================================
 
+* Remove redundant armv4 flag from arm926ejs compile flags.
+  Currently the arm926ejs tree has the armv4 option set during
+  compilation. This flag does not belong here because a arm926
+  CPU is always a armv5 CPU.
+
 * Make sure only supported compiler options are used
   Import "cc-option" shell function from kernel and
   use it to get the correct ARM GCC options for individual CPUs
