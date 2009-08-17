@@ -38,6 +38,12 @@ COBJS-y	+= cache.o
 COBJS-y	+= div0.o
 COBJS-y	+= interrupts.o
 
+# For EABI conformant tool chains, provide eabi_compat()
+ifneq (,$(findstring -mabi=aapcs-linux,$(PLATFORM_CPPFLAGS)))
+# For EABI, make sure to provide raise()
+COBJS-y	+= eabi_compat.o
+endif
+
 SRCS	:= $(SOBJS-y:.o=.S) $(COBJS-y:.o=.c)
 OBJS	:= $(addprefix $(obj),$(SOBJS-y) $(COBJS-y))
 
