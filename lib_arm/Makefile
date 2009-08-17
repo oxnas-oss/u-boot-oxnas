@@ -30,6 +30,12 @@ AOBJS	= _udivsi3.o _umodsi3.o
 COBJS	= armlinux.o board.o \
 	  cache.o div0.o
 
+# For EABI conformant tool chains, provide eabi_compat()
+ifneq (,$(findstring -mabi=aapcs-linux,$(PLATFORM_CPPFLAGS)))
+# For EABI, make sure to provide raise()
+COBJS	+= eabi_compat.o
+endif
+
 OBJS	= $(AOBJS) $(COBJS)
 
 $(LIB):	.depend $(OBJS)

@@ -2,6 +2,50 @@
 Backport Changes since U-Boot 1.1.2:
 ======================================================================
 
+* ARM: compiler options cleanup - improve tool chain support
+
+  For some time there have been repeated reports about build problems
+  with some ARM (cross) tool chains.  Especially issues about
+  (in)compatibility with the tool chain provided runtime support
+  library libgcc.a caused to add and support a private implementation
+  of such runtime support code in U-Boot.  A closer look at the code
+  indicated that some of these issues are actually home-made.  This
+  patch attempts to clean up some of the most obvious problems and
+  make building of U-Boot with different tool chains easier:
+
+  - Even though all ARM systems basicy used the same compiler options
+    to select a specific ABI from the tool chain, the code for this
+    was distributed over all cpu/*/config.mk files.  We move this one
+    level up into lib_arm/config.mk instead.
+
+  - So far, we only checked if "-mapcs-32" was supported by the tool
+    chain; if yes, this was used, if not, "-mabi=apcs-gnu" was
+    selected, no matter if the tool chain actually understood this
+    option.  There was no support for EABI conformant tool chains.
+    This patch implements the following logic:
+
+    1) If the tool chain supports
+       "-mabi=aapcs-linux -mno-thumb-interwork"
+       we use these options (EABI conformant tool chain).
+    2) Otherwise, we check first if
+       "-mapcs-32"
+       is supported, and then check for
+       "-mabi=apcs-gnu"
+       If one test succeeds, we use the first found option.
+    3) In case 2), we also test if "-mno-thumb-interwork", and use
+       this if the test succeeds. [For "-mabi=aapcs-linux" we set
+       "-mno-thumb-interwork" mandatorily.]
+
+    This way we use a similar logic for the compile options as the
+    Linux kernel does.
+
+  - Some EABI conformant tool chains cause external references to
+    utility functions like raise(); such functions are provided in
+    the new file lib_arm/eabi_compat.c
+
+    Note that lib_arm/config.mk gets parsed several times, so we must
+    make sure to add eabi_compat.o only once to the linker list.
+
 * Remove compiler warning: target CPU does not support interworking.
   This warning is issued by modern ARM-EABI GCC on non-thumb targets.
 
