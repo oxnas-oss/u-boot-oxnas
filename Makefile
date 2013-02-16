@@ -1230,6 +1230,8 @@ xtract_omap1610xxx = $(subst _cs0boot,,$(subst _cs3boot,,$(subst _cs_autoboot,,$
 
 xtract_omap730p2 = $(subst _cs0boot,,$(subst _cs3boot,, $(subst _config,,$1)))
 
+xtract_oxnas = $(subst _iomega_hmnhd,,$(subst _config,,$1))
+
 integratorap_config :	unconfig
 	@./mkconfig $(@:_config=) arm arm926ejs integratorap
 
@@ -1296,8 +1298,19 @@ smdk2410_config	:	unconfig
 SX1_config :		unconfig
 	@./mkconfig $(@:_config=) arm arm925t sx1
 
+oxnas_iomega_hmnhd_config \
 oxnas_config :	unconfig
-	@./mkconfig $(@:_config=) arm arm926ejs oxnas
+	@ >include/config.h
+	@[ -z "$(findstring _iomega_hmnhd,$@)" ] || \
+		{ echo "#define USE_FLASH 0" >>include/config.h ; \
+		  echo "#define LINUX_ROOT_RAIDED 0" >>include/config.h ; \
+		  echo "... for Iomega HMNHD with 64 MB RAM, no Flash, SATA, internal UART" ; \
+		}
+	@./mkconfig -a $(call xtract_oxnas,$@) arm arm926ejs oxnas
+
+#oxnas_config :	unconfig
+#	@ >include/config.h
+#	@./mkconfig -a $(@:_config=) arm arm926ejs oxnas
 
 # TRAB default configuration:	8 MB Flash, 32 MB RAM
 trab_config \
