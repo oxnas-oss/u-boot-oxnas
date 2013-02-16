@@ -29,8 +29,8 @@ include $(TOPDIR)/config.mk
 
 LIB	= lib$(BOARD).a
 
-OBJS	:= oxnas.o eth.o ide-$(NAS_VERSION).o
-SOBJS	:= platform-$(NAS_VERSION).o
+OBJS	:= oxnas.o eth.o ide-810.o
+SOBJS	:= platform-800.o platform-810.o
 
 $(LIB):	$(OBJS) $(SOBJS)
 	$(AR) crv $@ $^

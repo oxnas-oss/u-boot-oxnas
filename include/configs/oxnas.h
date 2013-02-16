@@ -29,7 +29,72 @@
 #define writeb(v, p) (*(volatile u8 *)(p)= (v))
 #define writel(v, p) (*(volatile u32*)(p)=(v))
 
-#define CFG_FLASH_EMPTY_INFO
+/*
+ * Defaults (original from board/oxnas/config.mk)
+ */
+#ifndef	NAS_VERSION
+#define	NAS_VERSION	810 /* OXE810 */
+#endif
+
+#ifndef	PLL400
+#define	PLL400		733333333
+#endif
+
+#ifndef	RPSCLK
+#define	RPSCLK		25000000
+#endif
+
+#ifndef	FPGA
+#define	FPGA		0 /* no external FPGA */
+#endif
+
+#ifndef	FPGA_ARM_CLK
+#define	FPGA_ARM_CLK	25000000
+#endif
+
+#ifndef	PROBE_MEM_SIZE
+#define	PROBE_MEM_SIZE	1
+#endif
+
+#ifndef	MEM_SIZE
+#define	MEM_SIZE	64 /* Memory size in MB if probing is not enabled */
+#endif
+
+#ifndef	MEM_ODT
+#define	MEM_ODT		150
+#endif
+
+#ifndef	USE_SATA
+#define	USE_SATA	1
+#endif
+
+#ifndef	USE_SATA_ENV
+#define	USE_SATA_ENV	1
+#endif
+
+#ifndef	USE_FLASH
+#define	USE_FLASH	1 /* use and init CFI/Flash interface */
+#endif
+
+#ifndef	LINUX_ROOT_RAIDED
+#define	LINUX_ROOT_RAIDED 1 /* Linux RootFS on SoftRAID (/dev/md1) */
+#endif
+
+#ifndef	USE_EXTERNAL_UART
+#define	USE_EXTERNAL_UART 0 /* no external UART */
+#endif
+
+#ifndef	INTERNAL_UART
+#define	INTERNAL_UART	2 /* use internal UART2 as console */
+#endif
+
+#ifndef	USE_LEON_TIME_COUNT
+#define	USE_LEON_TIME_COUNT 1 /* uses leon counted time to update system time on power-up */
+#endif
+
+#ifndef	TEST_BRD
+#define	TEST_BRD	0 /* Only significant for OX800 */
+#endif
 
 /**
  * Architecture
@@ -289,7 +354,9 @@
 
 #define FORCE_TOP_BOOT_FLASH	1
 
-#define CFG_FLASH_CFI			1
+#define CFG_FLASH_EMPTY_INFO	1
+
+#define CFG_FLASH_CFI		1
 #define CFG_FLASH_CFI_DRIVER	1
 
 #define NUM_FLASH_MAIN_BLOCKS   63          /* For Intel 28F320B3T */
