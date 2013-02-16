@@ -26,6 +26,8 @@
 #include <config.h>
 #include <version.h>
 
+#if (NAS_VERSION == 810)
+
 /* use estimate of processor speed to calculate number of cycles delay */
 /* delay count is nominal (PLL200 frequency x delay time) / loop count
  * expressing 200us as 200/1000000 and re-arranging gives the expression below
@@ -474,3 +476,5 @@ probe_table:
     .word 0x50000040, 0xabcdef01
 
 .ltorg
+
+#endif /* (NAS_VERSION == 810) */

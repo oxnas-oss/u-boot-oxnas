@@ -22,6 +22,8 @@
  */
 #include <common.h>
 
+#if (NAS_VERSION == 810)
+
 #define SATA_DMA_CHANNEL 0
 
 #define DMA_CTRL_STATUS      (0x0)
@@ -889,3 +891,5 @@ int ide_preinit(void)
 
     return !num_disks_found;
 }
+
+#endif /* (NAS_VERSION == 810) */
