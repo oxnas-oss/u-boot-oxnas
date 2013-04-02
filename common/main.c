@@ -182,7 +182,7 @@ static __inline__ int abortboot(int bootdelay)
 			else {
 				for (i = 0; i < presskey_max - 1; i ++)
 					presskey [i] = presskey [i + 1];
-
+do_recovery
 				presskey [i] = getc();
 			}
 		}
@@ -298,6 +298,47 @@ static __inline__ int abortboot(int bootdelay)
 
 /****************************************************************************/
 
+#if defined(CONFIG_OXNAS)
+/* This function parses the bootargs and removes the string specified
+ * (if present) from it
+ */
+void remove_string_from_bootargs(const char * toremove)
+{
+	/* Get a copy of the bootargs string from the runtime environment */
+	char tempBuf[1024];
+	char* cmd_string = strcpy(&tempBuf[0], getenv("bootargs"));
+
+	/* Find the extent of token in the bootargs string */
+	char* token = strstr(cmd_string, toremove);
+	char* token_end = token;
+	while ((*token_end != ' ') &&
+		   (*token_end != '\0')) {
+		++token_end;
+	}
+
+	if ((*token_end == '\0') && (token != token_end)) {
+		/*  token is last in bootargs string */
+		if (token != cmd_string) {
+			/* Is not the only token, so erase token and previous space" */
+			*(token-1) = '\0';
+		} else {
+			/* Is the only token, so no previous space to erase */
+			*token = '\0';
+		}
+	} else {
+		/* token is at intermediate location in bootargs string */
+		if (*token_end == ' ') {
+			++token_end;
+		}
+		/* Form the bootargs string without the token present */
+		strcpy(token, token_end);
+	}
+
+	/* Save the revised bootargs string to the runtime environment */
+	setenv("bootargs", cmd_string);
+}
+#endif // CONFIG_OXNAS
+
 void main_loop (void)
 {
 #ifndef CFG_HUSH_PARSER
@@ -368,6 +409,163 @@ void main_loop (void)
 #ifdef CONFIG_AUTO_COMPLETE
 	install_auto_complete();
 #endif
+
+
+#if defined(CONFIG_OXNAS)
+	/* Set the memory size given to Linux */
+	{
+		DECLARE_GLOBAL_DATA_PTR;
+
+		/* Get a copy of the bootargs string from the runtime environment */
+		char tempBuf[1024];
+		char* cmd_string;
+
+		remove_string_from_bootargs("mem=");
+
+		cmd_string = strcpy(&tempBuf[0], getenv("bootargs"));
+
+		/* How many MB of SDRAM are present */
+		int megabytes = gd->bd->bi_dram[0].size >> 20;
+
+		/* Append the memory token to the bootargs string */
+		switch (megabytes) {
+			case 64:
+				cmd_string = strcat(cmd_string, " mem=64M");
+				break;
+			case 128:
+				cmd_string = strcat(cmd_string, " mem=128M");
+				break;
+			case 256:
+				cmd_string = strcat(cmd_string, " mem=256M");
+				break;
+			default:
+				printf("Unsupported memory size, defaulting to 64M\n");
+				cmd_string = strcat(cmd_string, " mem=64M");
+		}
+
+		/* Save the revised bootargs string to the runtime environment */
+		setenv("bootargs", cmd_string);
+	}
+
+	/* Upgrade, recovery and power button monitor code
+	 */
+	int do_recovery = 0; /* default no recovery */
+
+	/* Read the upgrade flag from disk into memory */
+	/* ymtseng.20090225 */
+	// ide_init();
+	// run_command("ide read 48700000 120 1", 0);
+
+	char upgrade_mode = *(volatile char*)0x48700000;
+	char recovery_mode = *(volatile char*)0x48700001;
+	char controlled_pd_mode = *(volatile char*)0x48700002;
+
+	char tempBuf[1024];
+	char* cmd_string;
+
+	if (recovery_mode == RECOVERY_MAGIC) {
+		do_recovery = 1; /* perform recovery */
+	}
+
+	/* remove the poweroutage, powermode, adminmode and timeinc
+	 * strings, if they are already present in bootargs
+	 */
+
+	/* remove adminmode if present */
+	remove_string_from_bootargs("adminmode=");
+
+	/* remove time inc if present */
+	remove_string_from_bootargs("timeINC=");
+
+	/* remove poweroutage if present */
+	remove_string_from_bootargs("poweroutage=");
+
+	/* remove powermode if present */
+	remove_string_from_bootargs("powermode=");
+
+	/* End of String removal code */
+
+	cmd_string = strcpy(&tempBuf[0], getenv("bootargs"));
+
+	if (controlled_pd_mode == CONTROLLED_POWER_DOWN_MAGIC) {
+		/* System in controlled pwer down mode */
+		/* Read the SRAM location for normal boot flag */
+		char sram_data = *(volatile char*)(CFG_SRAM_BASE + CFG_SRAM_SIZE - POWER_ON_FLAG_SRAM_OFFSET);
+
+		if (sram_data == CONTROLLED_POWER_UP_MAGIC) {
+			/* The system is moving to power up state from power down state */
+			cmd_string = strcat(cmd_string, " powermode=controlledpup");
+			printf("Controlled Power UP requested\n");
+		} else {
+			/* The system has to remain in power down state */
+			/* power outage or hard reset: When system was powered down
+			 */
+			cmd_string = strcat(cmd_string, " powermode=controlledpdown poweroutage=yes");
+			printf("Controlled Power DOWN requested\n");
+		}
+
+		/* The leon time counter check is performed only when we reboot
+		 * from controlled power down mode
+		 */
+		#if (USE_LEON_TIME_COUNT == 1)
+		unsigned int ms_timeCount = *(volatile unsigned int*)(CFG_SRAM_BASE + CFG_SRAM_SIZE - MS_TIME_COUNT_SRAM_OFFSET);
+		if(ms_timeCount > 0) {
+			sprintf(cmd_string,"%s timeINC=%ld", cmd_string, ms_timeCount);
+		}
+		#endif
+	}
+	else {
+		/* power outage or hard reset: When system was up and running
+		 */
+		cmd_string = strcat(cmd_string, " poweroutage=yes");
+	}
+
+	setenv("bootargs", cmd_string);
+
+	/* branch off inot recovery or upadate */
+	if (upgrade_mode == UPGRADE_MAGIC) {
+		/* Script to select first disk */
+	        parse_string_outer("set select0 ide dev 0", FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP);
+
+	        /* Script to select second disk */
+	        parse_string_outer("set select1 ide dev 1", FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP);
+
+		/* Script for loading 256KB of upgrade rootfs image from hidden sectors */
+		parse_string_outer("set loadf ide read 48700000 4122 200", FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP);
+
+		/* Script for loading 2MB of upgrade kernel image from hidden sectors */
+		parse_string_outer("set loadk ide read 48800000 2122 1000", FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP);
+
+	        /* Script to light failure LED */
+		parse_string_outer("set lightled ledfail 1", FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP);
+
+	        /* Script to extinguish failure LED */
+	        parse_string_outer("set extinguishled ledfail 0", FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP);
+
+		/* Script for booting Linux kernel image with mkimage-wrapped initrd */
+	        parse_string_outer("set boot bootm 48800000 48700000", FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP);
+
+		/* Set Linux bootargs to use rootfs in initial ramdisk */
+	        parse_string_outer("set bootargs mem=32M console=ttyS0,115200 root=/dev/ram0", FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP);
+
+		/* Validate, load and boot the first validate set of initrd and kernel
+	           Theres alot of combos here due to disk/backup/fk arrangments, it'll
+	           no doubt work on the first or second one though. */
+		parse_string_outer("run          select0 loadf          loadk                boot || "
+			           "run lightled select1 loadf          loadk  extinguishled boot || "
+				   "run lightled select0 loadf  select1 loadk  extinguishled boot || "
+	                           "run lightled select1 loadf  select0 loadk  extinguishled boot || "
+						    "run lightled ", FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP);
+	} else if (do_recovery) {
+		printf ("\nRecovery mode selected\n");
+
+		char tempBuf[1024];
+		char* cmd_string = strcpy(&tempBuf[0], getenv("bootargs"));
+		cmd_string = strcat(cmd_string, " adminmode=recovery");
+		setenv("bootargs", cmd_string);
+	}
+
+#endif // CONFIG_OXNAS
 
 #ifdef CONFIG_PREBOOT
 	if ((p = getenv ("preboot")) != NULL) {

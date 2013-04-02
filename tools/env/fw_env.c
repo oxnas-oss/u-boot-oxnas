@@ -31,7 +31,8 @@
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <linux/mtd/mtd.h>
+//#include <linux/mtd/mtd.h>
+#include <mtd/mtd-user.h>
 #include "fw_env.h"
 
 typedef unsigned char uchar;
@@ -314,8 +315,8 @@ int fw_setenv (int argc, char *argv[])
 		/*
 		 * Ethernet Address and serial# can be set only once
 		 */
-		if ((strcmp (name, "ethaddr") == 0) ||
-			(strcmp (name, "serial#") == 0)) {
+//		if ((strcmp (name, "ethaddr") == 0) ||
+		if ((strcmp (name, "serial#") == 0)) {
 			fprintf (stderr, "Can't overwrite \"%s\"\n", name);
 			return (EROFS);
 		}

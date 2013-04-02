@@ -42,7 +42,7 @@
 	extern void disable_nvram(void);
 #endif
 
-#undef DEBUG_ENV
+//#undef DEBUG_ENV
 #ifdef DEBUG_ENV
 #define DEBUGF(fmt,args...) printf(fmt ,##args)
 #else
@@ -256,6 +256,9 @@ void env_relocate (void)
 #endif
 		env_crc_update ();
 		gd->env_valid = 1;
+
+		/* ymtseng.20090410: Must ensure that flash stores environment settings */
+		saveenv();
 	}
 	else {
 		env_relocate_spec ();

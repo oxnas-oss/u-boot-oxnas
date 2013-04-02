@@ -23,6 +23,7 @@
 
 SOURCES := crc32.c  fw_env.c  fw_env_main.c
 HEADERS := fw_env.h
+CROSS_COMPILE := /opt/montavista/pro/devkit/arm/v5t_le/bin/arm_v5t_le-
 
 all:	fw_printenv
 

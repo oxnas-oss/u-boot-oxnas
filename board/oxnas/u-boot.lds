@@ -1,6 +1,6 @@
 /*
- * (C) Copyright 2000-2003
- * Wolfgang Denk, DENX Software Engineering, wd@denx.de.
+ * (C) Copyright 2002
+ * Gary Jennejohn, DENX Software Engineering, <gj@denx.de>
  *
  * See file CREDITS for list of people who contributed to this
  * project.
@@ -21,9 +21,30 @@
  * MA 02111-1307 USA
  */
 
-#ifndef	__VERSION_H__
-#define	__VERSION_H__
+OUTPUT_FORMAT("elf32-littlearm", "elf32-littlearm", "elf32-littlearm")
+OUTPUT_ARCH(arm)
+ENTRY(_start)
+SECTIONS
+{
+	. = 0x00000000;
+	. = ALIGN(4);
+	.text	:
+	{
+	  cpu/arm926ejs/start.o	(.text)
+	  *(.text)
+	}
+	.rodata : { *(.rodata) }
+	. = ALIGN(4);
+	.data : { *(.data) }
+	. = ALIGN(4);
+	.got : { *(.got) }
 
-#define	U_BOOT_VERSION	"1.00 U-Boot 1.1.2"
+	__u_boot_cmd_start = .;
+	.u_boot_cmd : { *(.u_boot_cmd) }
+	__u_boot_cmd_end = .;
 
-#endif	/* __VERSION_H__ */
+	. = ALIGN(4);
+	__bss_start = .;
+	.bss : { *(.bss) }
+	_end = .;
+}

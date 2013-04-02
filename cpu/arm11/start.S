@@ -1,12 +1,12 @@
 /*
- *  armboot - Startup Code for ARM926EJS CPU-core
+ *  armboot - Startup Code for ARM11 CPU-core
  *
  *  Copyright (c) 2003  Texas Instruments
  *
- *  ----- Adapted for OMAP1610 OMAP730 from ARM925t code ------
+ *  ----- Adapted for ARM11 from ARM926ejs code ------
  *
- *  Copyright (c) 2001	Marius Gröger <mag@sysgo.de>
- *  Copyright (c) 2002	Alex Züpke <azu@sysgo.de>
+ *  Copyright (c) 2001	Marius Grï¿½ger <mag@sysgo.de>
+ *  Copyright (c) 2002	Alex Zï¿½pke <azu@sysgo.de>
  *  Copyright (c) 2002	Gary Jennejohn <gj@denx.de>
  *  Copyright (c) 2003	Richard Woodruff <r-woodruff2@ti.com>
  *  Copyright (c) 2003	Kshitij <kshitij@ti.com>
@@ -33,12 +33,6 @@
 
 #include <config.h>
 #include <version.h>
-
-#if defined(CONFIG_OMAP1610)
-#include <./configs/omap1510.h>
-#elif defined(CONFIG_OMAP730)
-#include <./configs/omap730.h>
-#endif
 
 /*
  *************************************************************************
@@ -227,8 +221,8 @@ cpu_init_crit:
 	 * disable MMU stuff and caches
 	 */
 	mrc	p15, 0, r0, c1, c0, 0
-	bic	r0, r0, #0x00002300	/* clear bits 13, 9:8 (--V- --RS) */
-	bic	r0, r0, #0x00000087	/* clear bits 7, 2:0 (B--- -CAM) */
+	bic	r0, r0, #0x00002B00	/* clear bits 13, 11, 9:8 (--V- Z-RS) */
+	bic	r0, r0, #0x00000086	/* clear bits 7, 2:0 (0--- -C-M) */
 	orr	r0, r0, #0x00000002	/* set bit 1 (A) Align */
 	orr	r0, r0, #0x00001000	/* set bit 12 (I) I-Cache */
 	mcr	p15, 0, r0, c1, c0, 0
