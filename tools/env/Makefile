@@ -21,8 +21,6 @@
 # MA 02111-1307 USA
 #
 
-CROSS_COMPILE := arm-linux-
-CC := arm-linux-gcc
 SOURCES := crc32.c  fw_env.c  fw_env_main.c
 HEADERS := fw_env.h
 
