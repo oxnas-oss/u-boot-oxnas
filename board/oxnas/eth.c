@@ -1326,7 +1326,7 @@ void phy_initialise(void)
 			break;
 		case PHY_TYPE_REALTEK_RTL8211BGR:
 			printf("PHY is Realtek RTL8211BGR\n");
-			set_phy_type_rgmii();
+			//set_phy_type_rgmii();
 			break;
 		case PHY_TYPE_LSI_ET1011C:
 			{
@@ -1428,6 +1428,7 @@ int eth_init(bd_t *bd)
 	if (!phy_detect()) {
 		printf("No PHY found\n");
 	} else {
+		int reg;
 		// Ensure the PHY is in a sensible state by resetting it
 		start_phy_reset();
 
@@ -1451,11 +1452,7 @@ int eth_init(bd_t *bd)
 
 		// Wait for PHY to have completed autonegotiation
 		printf("Wait for auto-negotiation to complete");
-		while (!is_autoneg_complete()) {
-			udelay(250000);
-			printf(".");
-		}
-		printf("\n");
+
 
 		// Interrogate the PHY for the link speed
 		if (detect_link_speed()) {

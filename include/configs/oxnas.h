@@ -284,6 +284,27 @@
 	"FEATURE_BIT=00\0" \
 	"CONTRY_TYPE=FF\0" \
 	"VENDOR_NAME=ZyXEL Communications Corp.\0"
+#elif defined(COVENTRYNSA221)
+#define CONFIG_EXTRA_ENV_SETTINGS \
+	"MODEL_ID=A603\0" \
+	"PRODUCT_NAME=NSA-221\0" \
+	"FEATURE_BIT=00\0" \
+	"CONTRY_TYPE=FF\0" \
+	"VENDOR_NAME=ZyXEL Communications Corp.\0"
+#elif defined(COVENTRYNSA210)
+#define CONFIG_EXTRA_ENV_SETTINGS \
+	"MODEL_ID=A703\0" \
+	"PRODUCT_NAME=NSA210\0" \
+	"FEATURE_BIT=00\0" \
+	"CONTRY_TYPE=FF\0" \
+	"VENDOR_NAME=ZyXEL Communications Corp.\0"
+#elif defined(TELIA210)
+#define CONFIG_EXTRA_ENV_SETTINGS \
+	"MODEL_ID=DB01\0" \
+	"PRODUCT_NAME=TELIA-210\0" \
+	"FEATURE_BIT=00\0" \
+	"CONTRY_TYPE=FF\0" \
+	"VENDOR_NAME=ZyXEL Communications Corp.\0"
 #else /* default assume this is NSA210 if MODEL is undefined or unrecognized MODEL */
 #define CONFIG_EXTRA_ENV_SETTINGS \
 	"MODEL_ID=D401\0" \

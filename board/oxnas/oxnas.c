@@ -58,6 +58,8 @@ static inline void delay(unsigned long loops)
 int board_init(void)
 {
     DECLARE_GLOBAL_DATA_PTR;
+    unsigned int reg_val;
+
 
     gd->bd->bi_arch_number = MACH_TYPE_OXNAS;
     gd->bd->bi_boot_params = PHYS_SDRAM_1_PA + 0x100;
@@ -177,9 +179,56 @@ int board_init(void)
     *(volatile u32*)SYS_CTRL_GPIO_TERTSEL_CTRL_0 &= ~(0x1 << 9);
     *(volatile u32*)SYS_CTRL_RSTEN_CLR_CTRL = (1<<SYS_CTRL_RSTEN_MISC_BIT);
 
+
+
+    /* Set other leds to off */
+    /* HD Green    : 22
+     * HD Red      : 27
+     * COPY Green  : 33
+     * COPY Red    : 24
+     * ESATA Green : 26
+     * ESATA Red   : 28
+     * USB Green   : 31
+     */
+
+
+
+#define SYS_CTRL_GPIO_PWMSEL_CTRL_0 0x4500009c
+#define SYS_CTRL_GPIO_PWMSEL_CTRL_1 0x450000A0
+#define GPIO_A_OUTPUT_CLEAR		 ((GPIO_1_PA) + 0x18)
+#define GPIO_A_OUTPUT_ENABLE_SET	 ((GPIO_1_PA) + 0x1C)
+
+#define GPIO_B_OUTPUT_CLEAR		 ((GPIO_2_PA) + 0x18)
+#define GPIO_B_OUTPUT_ENABLE_SET	 ((GPIO_2_PA) + 0x1C)
+
+
+
+
+#ifdef NSA221
+    reg_val = 0x1 << 22 | 0x1 << 27 | 0x1 << 24 | 0x1 << 26 | 0x1 << 28 | 0x1 << 31;
+
+    *(volatile u32*)SYS_CTRL_GPIO_PRIMSEL_CTRL_0 &= ~reg_val;
+    *(volatile u32*)SYS_CTRL_GPIO_SECSEL_CTRL_0  &= ~reg_val;
+    *(volatile u32*)SYS_CTRL_GPIO_TERTSEL_CTRL_0 &= ~reg_val;
+    *(volatile u32*)SYS_CTRL_GPIO_PWMSEL_CTRL_0 &= ~reg_val;
+    *(volatile u32*) GPIO_A_OUTPUT_CLEAR |= reg_val;
+    *(volatile u32*)GPIO_A_OUTPUT_ENABLE_SET |= reg_val;
+
+    reg_val = 0x1 << 1;
+    *(volatile u32*)SYS_CTRL_GPIO_PRIMSEL_CTRL_1 &= ~reg_val;
+    *(volatile u32*)SYS_CTRL_GPIO_SECSEL_CTRL_1  &= ~reg_val;
+    *(volatile u32*)SYS_CTRL_GPIO_TERTSEL_CTRL_1 &= ~reg_val;
+    *(volatile u32*)SYS_CTRL_GPIO_PWMSEL_CTRL_1 &= ~reg_val;
+    *(volatile u32*) GPIO_B_OUTPUT_CLEAR |= reg_val;
+    *(volatile u32*)GPIO_B_OUTPUT_ENABLE_SET |= reg_val;
+#endif
+
+
+
+
+
 #define PWM_CLOCK_REGISTER	0x44700400
 #define PWM_DATA_REGISTER_BASE  0x44700000
-#define SYS_CTRL_GPIO_PWMSEL_CTRL_0 0x4500009c
 #define MAX_PWMS	16
 
     *(volatile u32*)PWM_CLOCK_REGISTER = 65530;
@@ -275,7 +324,7 @@ int reset_cpu(void)
         (1UL << SYS_CTRL_CKEN_COPRO_BIT) |
         (1UL << SYS_CTRL_CKEN_DMA_BIT)   |
         (1UL << SYS_CTRL_CKEN_DPE_BIT)   |
-        (1UL << SYS_CTRL_CKEN_SATA_BIT)  |
+       (1UL << SYS_CTRL_CKEN_SATA_BIT)  |
         (1UL << SYS_CTRL_CKEN_I2S_BIT)   |
         (1UL << SYS_CTRL_CKEN_USBHS_BIT) |
         (1UL << SYS_CTRL_CKEN_MAC_BIT)   |
