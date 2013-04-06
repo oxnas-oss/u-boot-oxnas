@@ -369,6 +369,69 @@ void main_loop (void)
 	install_auto_complete();
 #endif
 
+
+#if defined(CONFIG_OXNAS)
+#if defined(BOOT_FROM_SATA)
+
+    /* Get the state of the recovery button ---------------------------------*/
+    /* Disable primary, secondary and teriary GPIO functions on recovery button lines */
+    writel( readl(RECOVERY_PRISEL_REG) & ~RECOVERY_BUTTON, RECOVERY_PRISEL_REG );
+    writel( readl(RECOVERY_SECSEL_REG) & ~RECOVERY_BUTTON, RECOVERY_SECSEL_REG );
+    writel( readl(RECOVERY_TERSEL_REG) & ~RECOVERY_BUTTON, RECOVERY_TERSEL_REG );
+
+    /* Enable GPIO input on recovery button */
+    writel(RECOVERY_BUTTON, RECOVERY_CLR_OE_REG );
+
+    /* Read the recovery button GPIO */
+    int doRecovery = ~readl(RECOVERY_DATA) & RECOVERY_BUTTON;
+
+    /* read the update status */
+    run_command("ide read 48700000 3f 1", 0);  /* Read the space between U-Boot environment and U-Boot program images */
+    char upgrade_mode = *(volatile char*)0x48700000;
+
+    /* branch off inot recovery or upadate */
+    if ( upgrade_mode == '1') {
+
+        /* Script to select first disk */
+        parse_string_outer("set select0 ide dev 0", FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP);
+
+        /* Script to select second disk */
+        parse_string_outer("set select1 ide dev 1", FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP);
+
+        /* Script for loading 256KB of upgrade rootfs image from hidden sectors */
+        parse_string_outer("set loadf ide read 48700000 1770 200", FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP);
+
+        /* Script for loading 2MB of upgrade kernel image from hidden sectors */
+        parse_string_outer("set loadk ide read 48800000 1970 1000", FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP);
+
+        /* Script for booting Linux kernel image with mkimage-wrapped initrd */
+        parse_string_outer("set boot bootm 48800000 48700000", FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP);
+
+        /* Set Linux bootargs to use rootfs in initial ramdisk */
+        parse_string_outer("set bootargs mem=32M console=ttyS0,115200 root=/dev/ram0 adminmode=update", FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP);
+
+        /* Validate, load and boot the first validate set of initrd and kernel
+           Theres alot of combos here due to disk/backup/fk arrangments, it'll
+           no doubt work on the first or second one though. */
+        parse_string_outer("run select0 loadf          loadk  boot || "
+                           "run select1 loadf          loadk  boot || "
+                           "run select0 loadf  select1 loadk  boot || "
+                           "run select1 loadf  select0 loadk  boot    ", FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP);
+    }
+    else if ( doRecovery )
+    {
+
+        printf ("\n!!!!!!!!! ATTEMPTING SYSTEM RECOVERY !!!!!!!!!\n");
+
+        char tempBuf[1024];
+        char* pCmdStr = strcpy( &tempBuf[0], getenv("bootargs") );
+        pCmdStr = strcat( pCmdStr, " adminmode=recovery" );
+        setenv("bootargs", pCmdStr);
+
+    }
+#endif //  BOOT_FROM_SATA
+#endif // CONFIG_OXNAS
+
 #ifdef CONFIG_PREBOOT
 	if ((p = getenv ("preboot")) != NULL) {
 # ifdef CONFIG_AUTOBOOT_KEYED
