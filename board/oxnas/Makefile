@@ -1,6 +1,10 @@
 #
-# (C) Copyright 2002
+# (C) Copyright 2000-2004
 # Wolfgang Denk, DENX Software Engineering, wd@denx.de.
+#
+# (C) Copyright 2004
+# ARM Ltd.
+# Philippe Robin, <philippe.robin@arm.com>
 #
 # See file CREDITS for list of people who contributed to this
 # project.
@@ -21,27 +25,27 @@
 # MA 02111-1307 USA
 #
 
-CROSS_COMPILE := arm-linux-
-CC := arm-linux-gcc
-SOURCES := crc32.c  fw_env.c  fw_env_main.c
-HEADERS := fw_env.h
+include $(TOPDIR)/config.mk
 
-all:	fw_printenv
+LIB	= lib$(BOARD).a
 
-fw_printenv:	$(SOURCES) $(HEADERS)
-	$(CROSS_COMPILE)gcc -Wall -DUSE_HOSTCC $(SOURCES) -o fw_printenv
+OBJS	:= oxnas.o eth.o ide-$(NAS_VERSION).o
+SOBJS	:= platform-$(NAS_VERSION).o
+
+$(LIB):	$(OBJS) $(SOBJS)
+	$(AR) crv $@ $^
 
 clean:
-	rm -f fw_printenv crc32.c .depend
+	rm -f $(SOBJS) $(OBJS)
 
-crc32.c:
-	ln -s ../../lib_generic/crc32.c crc32.c
+distclean:	clean
+	rm -f $(LIB) core *.bak .depend
 
 #########################################################################
 
-.depend:	Makefile $(SOURCES)
-		$(CC) -M $(HOST_CFLAGS) $(CPPFLAGS) -DUSE_HOSTCC $(SOURCES) > $@
+.depend:	Makefile $(SOBJS:.o=.S) $(OBJS:.o=.c)
+		$(CC) -M $(CPPFLAGS) $(SOBJS:.o=.S) $(OBJS:.o=.c) > $@
 
-sinclude .depend
+-include .depend
 
 #########################################################################
