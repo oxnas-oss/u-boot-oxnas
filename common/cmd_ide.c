@@ -415,7 +415,7 @@ int do_diskboot (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 	dev = simple_strtoul(boot_device, &ep, 16);
 
 	if (ide_dev_desc[dev].type==DEV_TYPE_UNKNOWN) {
-		printf ("\n** Device %d Not available\n", dev);
+		printf ("\n** Device %d not available\n", dev);
 		SHOW_BOOT_PROGRESS (-1);
 		return 1;
 	}
@@ -539,7 +539,13 @@ static int ide_probe(int device)
 
 void ide_init(void)
 {
+	static int ide_init_called = 0;
 	int i, bus;
+
+	if (ide_init_called) {
+		return;
+	}
+	ide_init_called = 1;
 
 #ifdef CONFIG_IDE_PREINIT
 	extern int ide_preinit(void);
@@ -983,6 +989,7 @@ static void ide_ident (block_dev_desc_t *dev_desc)
 {
 	ulong iobuf[ATA_SECTORWORDS];
 	unsigned char c;
+    unsigned int i;
 	hd_driveid_t *iop = (hd_driveid_t *)iobuf;
 
 #ifdef CONFIG_AMIGAONEG3SE
@@ -1000,6 +1007,10 @@ static void ide_ident (block_dev_desc_t *dev_desc)
 	int device;
 	device=dev_desc->dev;
 	printf ("  Device %d: ", device);
+
+    for ( i=0; i < ATA_SECTORWORDS; ++i) {
+        iobuf[i] = 0;
+    }
 
 #ifdef CONFIG_AMIGAONEG3SE
 	s = getenv("ide_maxbus");

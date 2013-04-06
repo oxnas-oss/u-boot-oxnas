@@ -29,7 +29,6 @@
 #include <ide.h>
 
 extern int is_device_present(int device_number);
-extern int ide_preinit(void);
 
 /* Point to the environment as held in SRAM */
 env_t *env_ptr = NULL;
@@ -71,32 +70,82 @@ int saveenv(void)
         if (!is_device_present(i)) {
             continue;
         }
-        ide_preinit();
+
+		/* Write environment to the main environment area on disk */
         unsigned long written = ide_write(i, CFG_ENV_DISK_SECTOR, CFG_ENV_SIZE/512, (ulong*)env_ptr);
         if (written != CFG_ENV_SIZE/512) {
+			printf("Saving environment to disk %d primary image failed\n", i);
             status = 0;
-        }
+        } else {
+			/* Write environment to the redundant environment area on disk */
+			written = ide_write(i, CFG_ENV_DISK_REDUNDANT_SECTOR, CFG_ENV_SIZE/512, (ulong*)env_ptr);
+			if (written != CFG_ENV_SIZE/512) {
+				printf("Saving environment to disk %d secondary image failed\n", i);
+				status = 0;
+			}
+		}
     }
 
     return status;
+}
+
+static int check_sram_env_integrity(void)
+{
+    DECLARE_GLOBAL_DATA_PTR;
+
+	env_t *sram_env = (env_t*)CFG_ENV_ADDR;
+	ulong crc = crc32(0, sram_env->data, CFG_ENV_SIZE - offsetof(env_t, data));
+
+	if (crc == sram_env->crc) {
+		gd->env_addr  = (ulong)sram_env->data;
+		gd->env_valid = 1;
+	}
+
+	return gd->env_valid;
 }
 
 int env_init(void)
 {
     DECLARE_GLOBAL_DATA_PTR;
 
-    /* Check the CRC on the environment in SRAM, as loaded from disk by an
-     * earlier loader in the boot process */
-    env_t *sram_env = (env_t*)CFG_ENV_ADDR;
-    ulong  crc = crc32(0, sram_env->data, CFG_ENV_SIZE - offsetof(env_t, data));
+	/* Have not yet found a valid environment */
+	gd->env_valid = 0;
 
-    if (crc == sram_env->crc) {
-        gd->env_addr  = (ulong)sram_env->data;
-        gd->env_valid = 1;
-    } else {
+	/* Need SATA available to load environment from alternate disk locations */
+	ide_init();
+
+	int i;
+    for (i=0; i < CFG_IDE_MAXDEVICE; ++i) {
+        if (!is_device_present(i)) {
+            continue;
+        }
+
+		/* Read environment from the primary environment area on disk */
+        unsigned long read = ide_read(i, CFG_ENV_DISK_SECTOR, CFG_ENV_SIZE/512, (ulong*)CFG_ENV_ADDR);
+        if (read == CFG_ENV_SIZE/512) {
+			/* Check integrity of primary environment data */
+			if (check_sram_env_integrity()) {
+				printf("Environment successfully read from disk %d primary image\n", i);
+				break;
+			}
+        }
+
+		/* Read environment from the secondary environment area on disk */
+		read = ide_read(i, CFG_ENV_DISK_REDUNDANT_SECTOR, CFG_ENV_SIZE/512, (ulong*)CFG_ENV_ADDR);
+		if (read == CFG_ENV_SIZE/512) {
+			/* Check integrity of secondary environment data */
+			if (check_sram_env_integrity()) {
+				printf("Environment successfully read from disk %d secondary image\n", i);
+				break;
+			}
+		}
+	}
+
+	if (!gd->env_valid) {
+		printf("Failed to read valid environment from disk, using built-in default\n");
         gd->env_addr  = (ulong)default_environment;
         gd->env_valid = 0;
-    }
+	}
 
     return 0;
 }

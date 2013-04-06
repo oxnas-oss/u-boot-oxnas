@@ -59,7 +59,7 @@ extern void reset_cpu(ulong addr);
 #define READ_TIMER (*(volatile ulong *)(CFG_TIMERBASE+4))
 #endif
 #ifdef CONFIG_OXNAS
-#define READ_TIMER ((*(volatile ulong *)(CFG_TIMERBASE+4)) & 0xFFFFUL)  /* RPS timer value register has only 16 defined bits */
+#define READ_TIMER ((*(volatile ushort *)(CFG_TIMERBASE+4)) & 0xFFFFUL)  /* RPS timer value register has only 16 defined bits */
 #endif
 
 #ifdef CONFIG_USE_IRQ
@@ -248,7 +248,7 @@ void reset_timer (void)
 
 ulong get_timer (ulong base)
 {
-	return get_timer_masked() - base;
+	return get_timer_masked () - base;
 }
 
 void set_timer (ulong t)
@@ -257,7 +257,7 @@ void set_timer (ulong t)
 }
 
 /* delay x useconds AND perserve advance timstamp value */
-void udelay(unsigned long usec)
+void udelay (unsigned long usec)
 {
 	ulong tmo, tmp;
 
@@ -270,41 +270,24 @@ void udelay(unsigned long usec)
 		tmo /= (1000*1000);
 	}
 
-#ifdef CONFIG_OXNAS
-    tmp = get_timer(0);                 /* Get current timestamp */
-    if ((tmp + tmo) > 0xFFFFUL) {       /* BHC: OXNAS only has 16-bit RPS timer value/load registers */
-        reset_timer_masked();           /* Reset "advancing" timestamp to 0, set lastdec value */
-        tmp = 0;                        /* BHC: Need to protect against rollover while sampling for end */
-    } else {
-        tmo += tmp;                     /* else, set advancing stamp wake up time */
-    }
-
-    while (1) {
-        ulong now = get_timer_masked();
-        if ((now >= tmo) || (now < tmp)) {  /* BHC: Account for end sampling missing rollover */
-            break;
-        }
-    }
-#else // CONFIG_OXNAS
 	tmp = get_timer (0);		/* get current timestamp */
 	if( (tmo + tmp + 1) < tmp ) 	/* if setting this fordward will roll time stamp */
 		reset_timer_masked ();	/* reset "advancing" timestamp to 0, set lastdec value */
 	else
 		tmo += tmp;		/* else, set advancing stamp wake up time */
 
-	while (get_timer_masked () < tmo) /* loop till event */
+	while (get_timer_masked () < tmo)/* loop till event */
 		/*NOP*/;
-#endif // CONFIG_OXNAS
 }
 
-void reset_timer_masked(void)
+void reset_timer_masked (void)
 {
 	/* reset time */
 	lastdec = READ_TIMER;  /* capure current decrementer value time */
 	timestamp = 0;         /* start "advancing" time stamp from 0 */
 }
 
-ulong get_timer_masked(void)
+ulong get_timer_masked (void)
 {
 	ulong now = READ_TIMER;		/* current tick value */
 

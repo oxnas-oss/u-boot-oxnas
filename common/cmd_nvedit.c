@@ -484,7 +484,7 @@ int do_askenv ( cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
  * or NULL if not found
  */
 
-char *getenv (uchar *name)
+char *getenv (const uchar *name)
 {
 	int i, nxt;
 

@@ -51,7 +51,7 @@
 
 .globl _start
 _start:
-	b 	reset
+	b	reset
 	ldr	pc, _undefined_instruction
 	ldr	pc, _software_interrupt
 	ldr	pc, _prefetch_abort
@@ -130,27 +130,8 @@ FIQ_STACK_START:
 /*
  * the actual reset code
  */
-#ifdef CONFIG_OXNAS_RESET_DELAY
-#define DELAY_200US	((NOMINAL_ARMCLK / (5 * 1000000)) * 200)
-#define DELAY_1S	((DELAY_200US) * 5000)
-#define DELAY_5S	((DELAY_200US) * 5000)
-
-reset_delay:
-	nop
-	nop
-	nop
-	subs r0, r0, #1
-	bne reset_delay
-	mov pc, lr
-#endif
 
 reset:
-#ifdef CONFIG_OXNAS_RESET_DELAY
-	/* Delay so the broken JTAG can get control */
-	ldr r0, =DELAY_5S
-	bl reset_delay
-#endif
-
 	/*
 	 * set the cpu to SVC32 mode
 	 */

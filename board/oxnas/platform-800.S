@@ -130,51 +130,6 @@ platformsetup:
 	/* Start using the initialisation value list */
 	adrl r3, init_table
 
-#if !SDRAM_IS_DDR
-	/* Copy next 3 entries */
-	ldr r4, =3
-loop0:
-	ldmia r3!, {r1, r2}
-	str r2, [r1]
-	subs r4, r4, #1
-	bne loop0
-
-	/* Delay for 200uS while DRAM controller stabilises. */
-	ldr r0, =DELAY_200US
-	bl delay
-
-	/* Copy next 4 entries */
-	ldr r4, =4
-loop1:
-	ldmia r3!, {r1, r2}
-	str r2, [r1]
-	subs r4, r4, #1
-	bne loop1
-
-	/* Wait at least 200 clock cycles. */
-	ldr r0, =DELAY_200
-	bl delay
-
-	/* Copy next 2 entries */
-	ldr r4, =2
-loop2:
-	ldmia r3!, {r1, r2}
-	str r2, [r1]
-	subs r4, r4, #1
-	bne loop2
-
-	/* Wait at least 8 clock  cycles. */
-	ldr r0, =DELAY_8
-	bl delay
-
-	/* Copy next 9 entries */
-	ldr r4, =9
-loop3:
-	ldmia r3!, {r1, r2}
-	str r2, [r1]
-	subs r4, r4, #1
-	bne loop3
-#else // DDR_SDRAM
 	/* Copy next 6 entries from DDR init table*/
 	ldr r4, =6
 loop0:
@@ -187,6 +142,20 @@ loop0:
 	ldr r0, =DELAY_200US
 	bl delay
 
+#if !TEST_BRD
+	/* Copy next entry */
+	ldr r4, =1
+loopx:
+	ldmia r3!, {r1, r2}
+	str r2, [r1]
+	subs r4, r4, #1
+	bne loopx
+
+	/* Delay for 200uS while DRAM controller stabilises. */
+	ldr r0, =DELAY_200US
+	bl delay
+#endif // TEST_BRD
+
 	/* Copy next entry */
 	ldr r4, =1
 loop1:
@@ -223,14 +192,13 @@ loop3:
 	ldr r0, =DELAY_200US
 	bl delay
 
-	/* Copy next 6 entries */
-	ldr r4, =6
+	/* Copy next 5 entries */
+	ldr r4, =5
 loop4:
 	ldmia r3!, {r1, r2}
 	str r2, [r1]
 	subs r4, r4, #1
 	bne loop4
-#endif // SDRAM
 
 	/* SDRAM initialised so now exit. */
 	mov lr, r6
@@ -254,41 +222,23 @@ _platformsetup:
 
 init_table:
 	/* Table of address, data for loading into the DRAM controller */
-#ifdef SDR_SDRAM
-    /* Configure the DRAM controller for 2 off 16Mx16 SDR memories configured
-     * as 32-bit wide. */
-	.word 0x45800000, 0x00000000	// SDR width 32
-	.word 0x45800004, 0x80000000	// Enable DDR core, but not clients yet
-	.word 0x45800014, 0x80000001	// Set DLL mode
-//    delay(40000);   // >200uS
-	.word 0x4580000c, 0x80200000	// Assert CKE for all further commands
-	.word 0x4580000c, 0x80280400	// Issue precharge to all banks
-	.word 0x4580000c, 0x80200000	// NOP, as only DDR has real command here
-	.word 0x4580000c, 0x80200032	// Set burst length 4, sequential,CAS 3
-//    delay(?);         // 200 clock cycles ?
-	.word 0x4580000c, 0x80280400	// Issue precharge to all banks
-	.word 0x4580000c, 0x80240000	// Issue auto-refresh command, CKE not asserted
-//    delay(10);        // >8 clock cycles
-	.word 0x4580000c, 0x80240000	// Issue auto-refresh command, CKE not asserted
-	.word 0x4580000c, 0x80200032	// Set burst length 4, sequential,CAS 3
-	.word 0x45800000, 0x000b0186	// SDR, size and width and refresh rate
-	.word 0x45800024, 0x00000124	// Set I/O drive strengths
-	.word 0x45800028, 0x0000001f	// Enable all arbiter features
-	.word 0x45800018, 0x00000000	// Disable all monitoring
-	.word 0x45800010, 0xFFFFFFFF	// Disable all read buffering, due to h/w bug
-	.word 0x4580002C, 0x00000000	// Do NOT disable HPROT, ie want write coherency
-	.word 0x45800004, 0x800000ff	// Enable all client interfaces
-#else
-    /* Configure the DRAM controller for 1 off 32Mx16 DDR memory */
+	/* Configure for a single DDR device */
 	.word 0x4500002C, 0x08
 	.word 0x45000038, 0x400
 	.word 0x45800000, 0x80100000
-	.word 0x45800004, 0x80000000	// Enable DDR core, but not clients yet
+	.word 0x45800004, 0x8000ffff	// Enable DDR core and all clients
 	.word 0x45800024, 0x1e4
-//	.word 0x45800014, 0x80000008	// DLL to manual, delay value of 8
-	.word 0x45800014, 0xe0000000	// DLL to automatic
+	.word 0x45800014, 0xe0000001	// DLL to automatic with starting value=1
 /* 200uS delay */
-	.word 0x45800000, 0x801b061a
+#if !TEST_BRD
+	.word 0x45800014, 0xa0000003	// DLL to automatic with offset value=3
+/* 200uS delay */
+#endif // TEST_BRD
+#if (MEM_SIZE == 32)
+	.word 0x45800000, 0x801B030C
+#else
+	.word 0x45800000, 0x801D030C
+#endif // MEM_SIZE
 /* 200uS delay */
 	.word 0x4580000c, 0x80280400
 /* 200uS delay */
@@ -297,9 +247,7 @@ init_table:
 	.word 0x4580000c, 0x80200063
 	.word 0x45800028, 0x0000001f	// Enable all arbiter features
 	.word 0x45800018, 0x00000000	// Disable all monitoring
-	.word 0x45800010, 0xFFFFFFFF	// Disable all read buffering, due to h/w bug
+	.word 0x45800010, 0xffffffff	// Disable all read buffering, due to h/w bug
 	.word 0x4580002C, 0x00000000	// Do NOT disable HPROT, ie want write coherency
-	.word 0x45800004, 0x800000ff	// Enable all client interfaces
-#endif
 
 .ltorg

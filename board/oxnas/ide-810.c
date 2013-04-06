@@ -139,8 +139,12 @@ static const int MAX_SRC_WRITE_LOOPS = 10000;   /* 0.1 second in units of 10uS *
 static const int MAX_NOT_BUSY_LOOPS  = 10000;   /* 1 second in units of 100uS */
 
 /* The internal SATA drive on which we should attempt to find partitions */
-static volatile u32* sata_regs_base[2] = { (volatile u32*)SATA_0_REGS_BASE, (volatile u32*)SATA_1_REGS_BASE };
-static volatile u32* sata_link_base[2] = { (volatile u32*)SATA_0_LINK_BASE, (volatile u32*)SATA_1_LINK_BASE };
+static volatile u32* sata_regs_base[2] =
+{
+    (volatile u32*)SATA_0_REGS_BASE,
+    (volatile u32*)SATA_1_REGS_BASE,
+
+};
 static u32 wr_sata_orb1[2] = { 0, 0 };
 static u32 wr_sata_orb2[2] = { 0, 0 };
 static u32 wr_sata_orb3[2] = { 0, 0 };
@@ -186,10 +190,7 @@ static void xfer_wr_shadow_to_orbs(int device)
 
 static inline void device_select(int device)
 {
-    int interface_no = 0;   /* master/slave has no meaning to SATA core */
-    int device_no = 0;      /* no port multipliers supported */
-
-    *(sata_regs_base[device] + SATA_DEVICE_SELECT_OFF) = (interface_no << 4) | device_no;
+    /* master/slave has no meaning to SATA core */
 }
 
 static int disk_present[CFG_IDE_MAXDEVICE];
@@ -202,7 +203,7 @@ unsigned char oxnas_sata_inb(int device, int port)
 
     /* Only permit accesses to disks found to be present during ide_preinit() */
     if (!disk_present[device]) {
-        return ATA_STAT_BUSY;
+        return ATA_STAT_FAULT;
     }
 
     device_select(device);
@@ -218,24 +219,28 @@ unsigned char oxnas_sata_inb(int device, int port)
             val = (*(sata_regs_base[device] + SATA_ORB2_OFF) & (0xFFUL << SATA_NSECT_BIT)) >> SATA_NSECT_BIT;
             break;
         case ATA_PORT_LBAL:
-            val = (*(sata_regs_base[device] + SATA_ORB1_OFF) & (0xFFUL << SATA_LBAL_BIT)) >> SATA_LBAL_BIT;
+            val = (*(sata_regs_base[device] + SATA_ORB3_OFF) & (0xFFUL << SATA_LBAL_BIT)) >> SATA_LBAL_BIT;
             break;
         case ATA_PORT_LBAM:
-            val = (*(sata_regs_base[device] + SATA_ORB1_OFF) & (0xFFUL << SATA_LBAM_BIT)) >> SATA_LBAM_BIT;
+            val = (*(sata_regs_base[device] + SATA_ORB3_OFF) & (0xFFUL << SATA_LBAM_BIT)) >> SATA_LBAM_BIT;
             break;
         case ATA_PORT_LBAH:
-            val = (*(sata_regs_base[device] + SATA_ORB1_OFF) & (0xFFUL << SATA_LBAH_BIT)) >> SATA_LBAH_BIT;
+            val = (*(sata_regs_base[device] + SATA_ORB3_OFF) & (0xFFUL << SATA_LBAH_BIT)) >> SATA_LBAH_BIT;
             break;
         case ATA_PORT_DEVICE:
-            val = (*(sata_regs_base[device] + SATA_ORB1_OFF) & (0xFFUL << SATA_DEVICE_BIT)) >> SATA_DEVICE_BIT;
+            val = (*(sata_regs_base[device] + SATA_ORB3_OFF) & (0xFFUL << SATA_HOB_LBAH_BIT)) >> SATA_HOB_LBAH_BIT;
+            val |= (*(sata_regs_base[device] + SATA_ORB1_OFF) & (0xFFUL << SATA_DEVICE_BIT)) >> SATA_DEVICE_BIT;
             break;
         case ATA_PORT_COMMAND:
             val = (*(sata_regs_base[device] + SATA_ORB2_OFF) & (0xFFUL << SATA_COMMAND_BIT)) >> SATA_COMMAND_BIT;
+            val |= ATA_STAT_DRQ ;
             break;
         default:
             printf("ide_inb() Unknown port = %d\n", port);
             break;
     }
+
+//    printf("inb: %d:%01x => %02x\n", device, port, val);
 
     return val;
 }
@@ -247,18 +252,25 @@ unsigned char oxnas_sata_inb(int device, int port)
 static inline int wait_no_error(int device)
 {
     int status = 0;
-    int loops = MAX_NO_ERROR_LOOPS;
-    do {
-        if (!(oxnas_sata_inb(device, ATA_PORT_COMMAND) & (1 << ATA_STATUS_ERR_BIT))) {
-            status = 1;
-            break;
-        }
-        udelay(10);
-    } while (--loops);
 
-    if (!loops) {
-        printf("wait_no_error() Timed out of wait for SATA no-error condition\n");
-    }
+	/* Check for ATA core error */
+	if (*(sata_regs_base[device] + SATA_INT_STATUS_OFF) & (1 << SATA_INT_STATUS_ERROR_BIT)) {
+		printf("wait_no_error() SATA core flagged error\n");
+	} else {
+		int loops = MAX_NO_ERROR_LOOPS;
+		do {
+			/* Check for ATA device error */
+			if (!(oxnas_sata_inb(device, ATA_PORT_COMMAND) & (1 << ATA_STATUS_ERR_BIT))) {
+				status = 1;
+				break;
+			}
+			udelay(10);
+		} while (--loops);
+
+		if (!loops) {
+			printf("wait_no_error() Timed out of wait for SATA no-error condition\n");
+		}
+	}
 
     return status;
 }
@@ -273,7 +285,7 @@ static inline int wait_sata_command_not_busy(int device)
     int status = 0;
     int loops = MAX_NOT_BUSY_LOOPS;
     do {
-        if (!(*(sata_regs_base[device] + SATA_COMMAND_OFF) & SATA_CMD_BUSY_BIT)) {
+        if (!(*(sata_regs_base[device] + SATA_COMMAND_OFF) & (1 << SATA_CMD_BUSY_BIT) )) {
             status = 1;
             break;
         }
@@ -301,6 +313,8 @@ void oxnas_sata_outb(int device, int port, unsigned char val)
         return;
     }
 
+//    printf("outb: %d:%01x <= %02x\n", device, port, val);
+
     device_select(device);
 
     send_method_t send_regs = SEND_NONE;
@@ -321,29 +335,25 @@ void oxnas_sata_outb(int device, int port, unsigned char val)
             send_regs = SEND_SIMPLE;
             break;
         case ATA_PORT_LBAL:
-            wr_sata_orb1[device] &= ~(0xFFUL << SATA_LBAL_BIT);
-            wr_sata_orb1[device] |= (val << SATA_LBAL_BIT);
             wr_sata_orb3[device] &= ~(0xFFUL << SATA_LBAL_BIT);
             wr_sata_orb3[device] |= (val << SATA_LBAL_BIT);
             send_regs = SEND_SIMPLE;
             break;
         case ATA_PORT_LBAM:
-            wr_sata_orb1[device] &= ~(0xFFUL << SATA_LBAM_BIT);
-            wr_sata_orb1[device] |= (val << SATA_LBAM_BIT);
             wr_sata_orb3[device] &= ~(0xFFUL << SATA_LBAM_BIT);
             wr_sata_orb3[device] |= (val << SATA_LBAM_BIT);
             send_regs = SEND_SIMPLE;
             break;
         case ATA_PORT_LBAH:
-            wr_sata_orb1[device] &= ~(0xFFUL << SATA_LBAH_BIT);
-            wr_sata_orb1[device] |= (val << SATA_LBAH_BIT);
             wr_sata_orb3[device] &= ~(0xFFUL << SATA_LBAH_BIT);
             wr_sata_orb3[device] |= (val << SATA_LBAH_BIT);
             send_regs = SEND_SIMPLE;
             break;
         case ATA_PORT_DEVICE:
             wr_sata_orb1[device] &= ~(0xFFUL << SATA_DEVICE_BIT);
-            wr_sata_orb1[device] |= (val << SATA_DEVICE_BIT);
+            wr_sata_orb1[device] |= ((val & 0xf0) << SATA_DEVICE_BIT);
+            wr_sata_orb3[device] &= ~(0xFFUL << SATA_HOB_LBAH_BIT);
+            wr_sata_orb3[device] |= ((val & 0x0f) << SATA_HOB_LBAH_BIT);
             send_regs = SEND_SIMPLE;
             break;
         case ATA_PORT_COMMAND:
@@ -363,6 +373,7 @@ void oxnas_sata_outb(int device, int port, unsigned char val)
             command &= ~SATA_OPCODE_MASK;
             command |= SATA_CMD_WRITE_TO_ORB_REGS;
             xfer_wr_shadow_to_orbs(device);
+            wait_sata_command_not_busy(device);
             *(sata_regs_base[device] + SATA_COMMAND_OFF) = command;
             if (!wait_no_error(device)) {
                 printf("oxnas_sata_outb() Wait for ATA no-error timed-out\n");
@@ -374,6 +385,7 @@ void oxnas_sata_outb(int device, int port, unsigned char val)
             command &= ~SATA_OPCODE_MASK;
             command |= SATA_CMD_WRITE_TO_ORB_REGS_NO_COMMAND;
             xfer_wr_shadow_to_orbs(device);
+            wait_sata_command_not_busy(device);
             *(sata_regs_base[device] + SATA_COMMAND_OFF) = command;
             if (!wait_no_error(device)) {
                 printf("oxnas_sata_outb() Wait for ATA no-error timed-out\n");
@@ -554,140 +566,54 @@ static inline int dma_busy(void)
     return (*DMA_CALC_REG_ADR(SATA_DMA_CHANNEL, DMA_CTRL_STATUS)) & DMA_CTRL_STATUS_IN_PROGRESS;
 }
 
-static void wait_dma_xfer(int device)
+static int wait_dma_not_busy(int device)
 {
-    /* Wait for ATA core not busy */
-    int loops = MAX_DMA_XFER_LOOPS;
-    do {
-        if (*(sata_regs_base[device] + SATA_INT_STATUS_OFF) & (1 << SATA_INT_STATUS_EOC_RAW_BIT)) {
-            break;
-        }
-        udelay(100);
-    } while (--loops);
+    unsigned int cleanup_required = 0;
 
-    if (!loops) {
-        printf("wait_dma_xfer() Timed out of wait for SATA core not busy\n");
-    } else {
-        /* Check for ATA core error*/
-        if (*(sata_regs_base[device] + SATA_INT_STATUS_OFF) & (1 << SATA_INT_STATUS_ERROR_BIT)) {
-            printf("wait_dma_xfer() SATA core flagged error\n");
+	/* Poll for DMA completion */
+	int loops = MAX_DMA_XFER_LOOPS;
+	do {
+		if (!dma_busy()) {
+			break;
+		}
+		udelay(100);
+	} while (--loops);
 
-            /* Abort DMA, as will never complete due to SATA error */
-            unsigned long ctrl_status = *DMA_CALC_REG_ADR(SATA_DMA_CHANNEL, DMA_CTRL_STATUS);
-            ctrl_status |= DMA_CTRL_STATUS_RESET;
-            *DMA_CALC_REG_ADR(SATA_DMA_CHANNEL, DMA_CTRL_STATUS) = ctrl_status;
+	if (!loops) {
+		printf("wait_dma_not_busy() Timed out of wait for DMA not busy\n");
+		cleanup_required = 1;
+	}
 
-            // Wait for the channel to become idle - should be quick as should
-            // finish after the next AHB single or burst transfer
-            loops = MAX_DMA_ABORT_LOOPS;
-            do {
-                if (!(*DMA_CALC_REG_ADR(SATA_DMA_CHANNEL, DMA_CTRL_STATUS) & DMA_CTRL_STATUS_IN_PROGRESS)) {
-                    break;
-                }
-                udelay(10);
-            } while (--loops);
+    if (cleanup_required) {
+        /* Abort DMA to make sure it has finished. */
+        unsigned long ctrl_status = *DMA_CALC_REG_ADR(SATA_DMA_CHANNEL, DMA_CTRL_STATUS);
+        ctrl_status |= DMA_CTRL_STATUS_RESET;
+        *DMA_CALC_REG_ADR(SATA_DMA_CHANNEL, DMA_CTRL_STATUS) = ctrl_status;
 
-            if (!loops) {
-                printf("wait_dma_xfer() Timed out of wait for DMA channel abort\n");
+        // Wait for the channel to become idle - should be quick as should
+        // finish after the next AHB single or burst transfer
+        loops = MAX_DMA_ABORT_LOOPS;
+        do {
+            if (!(*DMA_CALC_REG_ADR(SATA_DMA_CHANNEL, DMA_CTRL_STATUS) & DMA_CTRL_STATUS_IN_PROGRESS)) {
+                break;
             }
+            udelay(10);
+        } while (--loops);
 
-            // Deassert reset for the channel
-            ctrl_status = *DMA_CALC_REG_ADR(SATA_DMA_CHANNEL, DMA_CTRL_STATUS);
-            ctrl_status &= ~DMA_CTRL_STATUS_RESET;
-            *DMA_CALC_REG_ADR(SATA_DMA_CHANNEL, DMA_CTRL_STATUS) = ctrl_status;
+        if (!loops) {
+            printf("wait_dma_not_busy() Timed out of wait for DMA channel abort\n");
         } else {
-            /* Poll for DMA completion */
-            loops = MAX_DMA_XFER_LOOPS;
-            do {
-                if (!dma_busy()) {
-                    break;
-                }
-                udelay(100);
-            } while (--loops);
+			/* Successfully cleanup the DMA channel */
+			cleanup_required = 0;
+		}
 
-            if (!loops) {
-                printf("wait_dma_xfer() Timed out of wait for DMA not busy\n");
-            }
-        }
-    }
-}
-
-void oxnas_sata_output_data(int device, ulong *sect_buf, int words)
-{
-    /* Only permit accesses to disks found to be present during ide_preinit() */
-    if (!disk_present[device]) {
-        return;
+        // Deassert reset for the channel
+        ctrl_status = *DMA_CALC_REG_ADR(SATA_DMA_CHANNEL, DMA_CTRL_STATUS);
+        ctrl_status &= ~DMA_CTRL_STATUS_RESET;
+        *DMA_CALC_REG_ADR(SATA_DMA_CHANNEL, DMA_CTRL_STATUS) = ctrl_status;
     }
 
-    /* Select the required internal SATA drive */
-    device_select(device);
-
-    /* Start the DMA channel sending data from the passed buffer to the SATA core */
-    dma_start_write(sect_buf, words << 2);
-
-    /* Wait for SATA core and DMA to finish */
-    wait_dma_xfer(device);
-}
-
-void oxnas_sata_input_data(int device, ulong *sect_buf, int words)
-{
-    /* Only permit accesses to disks found to be present during ide_preinit() */
-    if (!disk_present[device]) {
-        return;
-    }
-
-    /* Select the required internal SATA drive */
-    device_select(device);
-
-    /* Start the DMA channel receiving data from the SATA core into the passed buffer */
-    dma_start_read(sect_buf, words << 2);
-
-    /* Wait for SATA core and DMA to finish */
-    wait_dma_xfer(device);
-}
-
-static u32 scr_read(int device, unsigned int sc_reg)
-{
-    /* Setup adr of required register. std regs start eight into async region */
-    *(sata_link_base[device] + OX800SATA_LINK_RD_ADDR) = sc_reg*4 + SATA_STD_ASYNC_REGS_OFF;
-
-    /* Wait for data to be available */
-    int loops = MAX_SRC_READ_LOOPS;
-    do {
-        if (*(sata_link_base[device] + OX800SATA_LINK_CONTROL) & 1UL) {
-            break;
-        }
-        udelay(10);
-    } while (--loops);
-
-    if (!loops) {
-        printf("scr_read() Timed out of wait for read completion\n");
-    }
-
-    /* Read the data from the async register */
-    return *(sata_link_base[device] + OX800SATA_LINK_DATA);
-}
-
-static void scr_write(int device, unsigned int sc_reg, u32 val)
-{
-    /* Setup the data for the write */
-    *(sata_link_base[device] + OX800SATA_LINK_DATA) = val;
-
-    /* Setup adr of required register. std regs start eight into async region */
-    *(sata_link_base[device] + OX800SATA_LINK_WR_ADDR) = sc_reg*4 + SATA_STD_ASYNC_REGS_OFF;
-
-    /* Wait for data to be written */
-    int loops = MAX_SRC_WRITE_LOOPS;
-    do {
-        if (*(sata_link_base[device] + OX800SATA_LINK_CONTROL) & 1UL) {
-            break;
-        }
-        udelay(10);
-    } while (--loops);
-
-    if (!loops) {
-        printf("scr_write() Timed out of wait for write completion\n");
-    }
+	return !cleanup_required;
 }
 
 /**
@@ -712,14 +638,124 @@ static unsigned int wait_not_busy(int device, unsigned long timeout_secs)
     return busy;
 }
 
+void oxnas_sata_output_data(int device, ulong *sect_buf, int words)
+{
+    /* Only permit accesses to disks found to be present during ide_preinit() */
+    if (!disk_present[device]) {
+        return;
+    }
+
+    /* Select the required internal SATA drive */
+    device_select(device);
+
+    /* Start the DMA channel sending data from the passed buffer to the SATA core */
+    dma_start_write(sect_buf, words << 2);
+
+	/* Don't know why we need this delay, but without it the wait for DMA not
+	   busy times soemtimes out, e.g. when saving environment to second disk */
+	udelay(1000);
+
+    /* Wait for DMA to finish */
+    if (!wait_dma_not_busy(device)) {
+		printf("Timed out of wait for DMA channel for SATA device %d to have in-progress clear\n", device);
+	}
+
+	/* Sata core should finish after DMA */
+	if (wait_not_busy(device, 30)) {
+		printf("Timed out of wait for SATA device %d to have BUSY clear\n", device);
+	}
+	if (!wait_no_error(device)) {
+		printf("oxnas_sata_output_data() Wait for ATA no-error timed-out\n");
+	}
+}
+
+void oxnas_sata_input_data(int device, ulong *sect_buf, int words)
+{
+    /* Only permit accesses to disks found to be present during ide_preinit() */
+    if (!disk_present[device]) {
+        return;
+    }
+
+    /* Select the required internal SATA drive */
+    device_select(device);
+
+    /* Start the DMA channel receiving data from the SATA core into the passed buffer */
+    dma_start_read(sect_buf, words << 2);
+
+	/* Sata core should finish before DMA */
+	if (wait_not_busy(device, 30)) {
+		printf("Timed out of wait for SATA device %d to have BUSY clear\n", device);
+	}
+	if (!wait_no_error(device)) {
+		printf("oxnas_sata_output_data() Wait for ATA no-error timed-out\n");
+	}
+
+    /* Wait for DMA to finish */
+    if (!wait_dma_not_busy(device)) {
+		printf("Timed out of wait for DMA channel for SATA device %d to have in-progress clear\n", device);
+	}
+}
+
+static u32 scr_read(int device, unsigned int sc_reg)
+{
+    /* Setup adr of required register. std regs start eight into async region */
+    *(sata_regs_base[device] + SATA_LINK_RD_ADDR) = sc_reg*4 + SATA_STD_ASYNC_REGS_OFF;
+
+    /* Wait for data to be available */
+    int loops = MAX_SRC_READ_LOOPS;
+    do {
+        if (*(sata_regs_base[device] + SATA_LINK_CONTROL) & 1UL) {
+            break;
+        }
+        udelay(10);
+    } while (--loops);
+
+    if (!loops) {
+        printf("scr_read() Timed out of wait for read completion\n");
+    }
+
+    /* Read the data from the async register */
+    return *(sata_regs_base[device] + SATA_LINK_DATA);
+}
+
+static void scr_write(int device, unsigned int sc_reg, u32 val)
+{
+    /* Setup the data for the write */
+    *(sata_regs_base[device] + SATA_LINK_DATA) = val;
+
+    /* Setup adr of required register. std regs start eight into async region */
+    *(sata_regs_base[device] + SATA_LINK_WR_ADDR) = sc_reg*4 + SATA_STD_ASYNC_REGS_OFF;
+
+    /* Wait for data to be written */
+    int loops = MAX_SRC_WRITE_LOOPS;
+    do {
+        if (*(sata_regs_base[device] + SATA_LINK_CONTROL) & 1UL) {
+            break;
+        }
+        udelay(10);
+    } while (--loops);
+
+    if (!loops) {
+        printf("scr_write() Timed out of wait for write completion\n");
+    }
+}
+
 #define PHY_LOOP_COUNT  25  /* Wait for upto 5 seconds for PHY to be found */
 static int phy_reset(int device)
 {
+#ifdef FPGA
+    /* The FPGA thinks it can do 3G when infact only 1.5G is possible, so limit
+    it to Gen-1 SATA (1.5G) */
+    scr_write(device, SATA_SCR_CONTROL, 0x311);  /* Issue phy wake & core reset */
+    scr_read(device, SATA_SCR_STATUS);           /* Dummy read; flush */
+    udelay(1000);
+    scr_write(device, SATA_SCR_CONTROL, 0x310);  /* Issue phy wake & clear core reset */
+#else
     scr_write(device, SATA_SCR_CONTROL, 0x301);  /* Issue phy wake & core reset */
     scr_read(device, SATA_SCR_STATUS);           /* Dummy read; flush */
     udelay(1000);
     scr_write(device, SATA_SCR_CONTROL, 0x300);  /* Issue phy wake & clear core reset */
-
+#endif
     /* Wait for upto 5 seconds for PHY to become ready */
     int phy_status = 0;
     int loops = 0;
@@ -757,7 +793,6 @@ static int wait_FIS(int device)
 
 int ide_preinit(void)
 {
-    int status = 0;
     int num_disks_found = 0;
 
     /* Initialise records of which disks are present to all present */
@@ -767,26 +802,33 @@ int ide_preinit(void)
     }
 
 //udelay(1000000);
-    /* Block reset SATA and DMA cores */
-    *(volatile u32*)SYS_CTRL_RSTEN_SET_CTRL = (1UL << SYS_CTRL_RSTEN_SATA_BIT);
-    *(volatile u32*)SYS_CTRL_RSTEN_CLR_CTRL = (1UL << SYS_CTRL_RSTEN_SATA_BIT);
-//udelay(1000000);
-    *(volatile u32*)SYS_CTRL_RSTEN_SET_CTRL = (1UL << SYS_CTRL_RSTEN_SATA_PHY_BIT);
-    *(volatile u32*)SYS_CTRL_RSTEN_CLR_CTRL = (1UL << SYS_CTRL_RSTEN_SATA_PHY_BIT);
-//udelay(1000000);
-    *(volatile u32*)SYS_CTRL_RSTEN_SET_CTRL = (1UL << SYS_CTRL_RSTEN_DMA_BIT);
-    *(volatile u32*)SYS_CTRL_RSTEN_CLR_CTRL = (1UL << SYS_CTRL_RSTEN_DMA_BIT);
-
     /* Enable clocks to SATA and DMA cores */
     *(volatile u32*)SYS_CTRL_CKEN_SET_CTRL = (1UL << SYS_CTRL_CKEN_SATA_BIT);
     *(volatile u32*)SYS_CTRL_CKEN_SET_CTRL = (1UL << SYS_CTRL_CKEN_DMA_BIT);
 
+    /* Block reset SATA and DMA cores */
+    *(volatile u32*)SYS_CTRL_RSTEN_SET_CTRL = (1UL << SYS_CTRL_RSTEN_SATA_BIT) |
+                                              (1UL << SYS_CTRL_RSTEN_SATA_LINK_BIT) |
+                                              (1UL << SYS_CTRL_RSTEN_SATA_PHY_BIT) |
+                                              (1UL << SYS_CTRL_RSTEN_DMA_BIT);
+    udelay(50);
+    *(volatile u32*)SYS_CTRL_RSTEN_CLR_CTRL = (1UL << SYS_CTRL_RSTEN_SATA_PHY_BIT);
+    udelay(50);
+    *(volatile u32*)SYS_CTRL_RSTEN_CLR_CTRL = (1UL << SYS_CTRL_RSTEN_SATA_LINK_BIT) |
+                                              (1UL << SYS_CTRL_RSTEN_SATA_BIT);
+    udelay(50);
+    *(volatile u32*)SYS_CTRL_RSTEN_CLR_CTRL = (1UL << SYS_CTRL_RSTEN_DMA_BIT);
+    udelay(50);
+//udelay(1000000);
+
+    /* disable and clear core interrupts */
+    *((unsigned long*)SATA_HOST_REGS_BASE + SATA_INT_ENABLE_CLR_OFF) = ~0UL;
+    *((unsigned long*)SATA_HOST_REGS_BASE + SATA_INT_CLR_OFF) = ~0UL;
+
     int device;
     for (device = 0; device < CFG_IDE_MAXDEVICE; device++) {
         int found = 0;
-
-        /* Configure the Burst Buffer Port for DMA */
-        *(sata_regs_base[device] + SATA_BURST_BUF_CTRL_OFF) = 0;
+        int retries = 1;
 
         /* Disable SATA interrupts */
         *(sata_regs_base[device] + SATA_INT_ENABLE_CLR_OFF) = ~0UL;
@@ -794,13 +836,16 @@ int ide_preinit(void)
         /* Clear any pending SATA interrupts */
         *(sata_regs_base[device] + SATA_INT_CLR_OFF) = ~0UL;
 
-        /* clear sector count register for FIS detection */
-        oxnas_sata_outb(device, ATA_PORT_NSECT, 0);
+        do {
+            /* clear sector count register for FIS detection */
+            oxnas_sata_outb(device, ATA_PORT_NSECT, 0);
 
-        /* Get the PHY working */
-        if (!phy_reset(device)) {
-            printf("SATA PHY not ready for device %d\n", device);
-        } else {
+            /* Get the PHY working */
+            if (!phy_reset(device)) {
+                printf("SATA PHY not ready for device %d\n", device);
+                break;
+            }
+
             if (!wait_FIS(device)) {
                 printf("No FIS received from device %d\n", device);
             } else {
@@ -812,14 +857,35 @@ int ide_preinit(void)
                         found = 1;
                     }
                 } else {
-                    printf("No SATA device %d found, PHY status = 0x%08x\n", device, scr_read(device, SATA_SCR_STATUS));
+                    printf("No SATA device %d found, PHY status = 0x%08x\n",
+                            device, scr_read(device, SATA_SCR_STATUS));
                 }
+                break;
             }
-        }
+        } while (retries--) ;
 
         /* Record whether disk is present, so won't attempt to access it later */
         disk_present[device] = found;
     }
+
+    /* post disk detection clean-up */
+    for (device = 0; device < CFG_IDE_MAXDEVICE; device++) {
+        if ( disk_present[device] ) {
+            /* set as ata-5 (28-bit) */
+            *(sata_regs_base[device] + SATA_DRIVE_CONTROL_OFF) = 0UL;
+
+            /* clear phy/link errors */
+            scr_write(device, SATA_SCR_ERROR, ~0);
+
+            /* clear host errors */
+            *(sata_regs_base[device] + SATA_CONTROL_OFF) |= SATA_SCTL_CLR_ERR;
+
+            /* clear interrupt register as this clears the error bit in the IDE
+            status register */
+            *(sata_regs_base[device] + SATA_INT_CLR_OFF) = ~0UL;
+        }
+    }
+
 
     return !num_disks_found;
 }

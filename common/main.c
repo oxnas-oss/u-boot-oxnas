@@ -182,7 +182,7 @@ static __inline__ int abortboot(int bootdelay)
 			else {
 				for (i = 0; i < presskey_max - 1; i ++)
 					presskey [i] = presskey [i + 1];
-
+do_recovery
 				presskey [i] = getc();
 			}
 		}
@@ -371,27 +371,104 @@ void main_loop (void)
 
 
 #if defined(CONFIG_OXNAS)
-#if defined(BOOT_FROM_SATA)
+	/* Set the memory size given to Linux */
+	{
+		DECLARE_GLOBAL_DATA_PTR;
 
-    /* Get the state of the recovery button ---------------------------------*/
-    /* Disable primary, secondary and teriary GPIO functions on recovery button lines */
-    writel( readl(RECOVERY_PRISEL_REG) & ~RECOVERY_BUTTON, RECOVERY_PRISEL_REG );
-    writel( readl(RECOVERY_SECSEL_REG) & ~RECOVERY_BUTTON, RECOVERY_SECSEL_REG );
-    writel( readl(RECOVERY_TERSEL_REG) & ~RECOVERY_BUTTON, RECOVERY_TERSEL_REG );
+		/* Get a copy of the bootargs string from the runtime environment */
+		char tempBuf[1024];
+		char* cmd_string = strcpy(&tempBuf[0], getenv("bootargs"));
 
-    /* Enable GPIO input on recovery button */
-    writel(RECOVERY_BUTTON, RECOVERY_CLR_OE_REG );
+		/* Find the extent of memory token in the bootargs string */
+		char* mem_token = strstr(cmd_string, "mem=");
+		char* mem_token_end = mem_token;
+		while ((*mem_token_end != ' ') &&
+			   (*mem_token_end != '\0')) {
+			++mem_token_end;
+		}
 
-    /* Read the recovery button GPIO */
-    int doRecovery = ~readl(RECOVERY_DATA) & RECOVERY_BUTTON;
+		if ((*mem_token_end == '\0') && (mem_token != mem_token_end)) {
+			/* Memory token is last in bootargs string */
+			if (mem_token != cmd_string) {
+				/* Is not the only token, so erase token and previous space" */
+				*(mem_token-1) = '\0';
+			} else {
+				/* Is the only token, so no previous space to erase */
+				*mem_token = '\0';
+			}
+		} else {
+			/* Memory token is at intermediate location in bootargs string */
+			if (*mem_token_end == ' ') {
+				++mem_token_end;
+			}
 
-    /* read the update status */
-    run_command("ide read 48700000 3f 1", 0);  /* Read the space between U-Boot environment and U-Boot program images */
+			/* Form the bootargs string without the memory token present */
+			strcpy(mem_token, mem_token_end);
+		}
+
+		/* How many MB of SDRAM are present */
+		int megabytes = gd->bd->bi_dram[0].size >> 20;
+
+		/* Append the memory token to the bootargs string */
+		switch (megabytes) {
+			case 64:
+				cmd_string = strcat(cmd_string, " mem=64M");
+				break;
+			case 128:
+				cmd_string = strcat(cmd_string, " mem=128M");
+				break;
+			case 256:
+				cmd_string = strcat(cmd_string, " mem=256M");
+				break;
+			default:
+				printf("Unsupported memory size, defaulting to 64M\n");
+				cmd_string = strcat(cmd_string, " mem=64M");
+		}
+
+		/* Save the revised bootargs string to the runtime environment */
+		setenv("bootargs", cmd_string);
+	}
+
+/* Upgrade, recovery and power button monitor code
+*/
+    int do_recovery = 0; /* default no recovery */
+
+    /* Read the upgrade flag from disk into memory */
+    ide_init();
+    run_command("ide read 48700000 ff 1", 0);
+
     char upgrade_mode = *(volatile char*)0x48700000;
+    char recovery_mode = *(volatile char*)0x48700001;
+    char controlled_pd_mode = *(volatile char*)0x48700002;
+
+	if (recovery_mode == RECOVERY_MAGIC) {
+		do_recovery = 1; /* perform recovery */
+	}
+
+	if (controlled_pd_mode == CONTROLLED_POWER_DOWN_MAGIC) {
+		/* System in controlled pwer down mode */
+
+		/* Read the SRAM location for normal boot flag */
+		char sram_data = *(volatile char*)(CFG_SRAM_BASE + CFG_SRAM_SIZE - POWER_ON_FLAG_SRAM_OFFSET);
+		char tempBuf[1024];
+		char* cmd_string = strcpy(&tempBuf[0], getenv("bootargs"));
+
+		if (sram_data == CONTROLLED_POWER_UP_MAGIC) {
+			/* The system has to remain in power down state */
+
+			/* Set appropriate boot args */
+			cmd_string = strcat(cmd_string, " powermode=controlledpup");
+			printf("Controlled Power UP requested\n");
+		} else {
+			/* The system is moving to power up state from power down state */
+			cmd_string = strcat(cmd_string, " powermode=controlledpdown");
+			printf("Controlled Power DOWN requested\n");
+		}
+		setenv("bootargs", cmd_string);
+	}
 
     /* branch off inot recovery or upadate */
-    if ( upgrade_mode == '1') {
-
+    if (upgrade_mode == UPGRADE_MAGIC) {
         /* Script to select first disk */
         parse_string_outer("set select0 ide dev 0", FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP);
 
@@ -404,32 +481,35 @@ void main_loop (void)
         /* Script for loading 2MB of upgrade kernel image from hidden sectors */
         parse_string_outer("set loadk ide read 48800000 1970 1000", FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP);
 
+        /* Script to light failure LED */
+        parse_string_outer("set lightled ledfail 1", FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP);
+
+        /* Script to extinguish failure LED */
+        parse_string_outer("set extinguishled ledfail 0", FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP);
+
         /* Script for booting Linux kernel image with mkimage-wrapped initrd */
         parse_string_outer("set boot bootm 48800000 48700000", FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP);
 
         /* Set Linux bootargs to use rootfs in initial ramdisk */
-        parse_string_outer("set bootargs mem=32M console=ttyS0,115200 root=/dev/ram0 adminmode=update", FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP);
+        parse_string_outer("set bootargs mem=32M console=ttyS0,115200 root=/dev/ram0", FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP);
 
         /* Validate, load and boot the first validate set of initrd and kernel
            Theres alot of combos here due to disk/backup/fk arrangments, it'll
            no doubt work on the first or second one though. */
-        parse_string_outer("run select0 loadf          loadk  boot || "
-                           "run select1 loadf          loadk  boot || "
-                           "run select0 loadf  select1 loadk  boot || "
-                           "run select1 loadf  select0 loadk  boot    ", FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP);
+        parse_string_outer("run          select0 loadf          loadk                boot || "
+                           "run lightled select1 loadf          loadk  extinguishled boot || "
+                           "run lightled select0 loadf  select1 loadk  extinguishled boot || "
+                           "run lightled select1 loadf  select0 loadk  extinguishled boot || "
+						    "run lightled ", FLAG_PARSE_SEMICOLON | FLAG_EXIT_FROM_LOOP);
+    } else if (do_recovery) {
+		printf ("\nRecovery mode selected\n");
+
+		char tempBuf[1024];
+		char* cmd_string = strcpy(&tempBuf[0], getenv("bootargs"));
+		cmd_string = strcat(cmd_string, " adminmode=recovery");
+		setenv("bootargs", cmd_string);
     }
-    else if ( doRecovery )
-    {
 
-        printf ("\n!!!!!!!!! ATTEMPTING SYSTEM RECOVERY !!!!!!!!!\n");
-
-        char tempBuf[1024];
-        char* pCmdStr = strcpy( &tempBuf[0], getenv("bootargs") );
-        pCmdStr = strcat( pCmdStr, " adminmode=recovery" );
-        setenv("bootargs", pCmdStr);
-
-    }
-#endif //  BOOT_FROM_SATA
 #endif // CONFIG_OXNAS
 
 #ifdef CONFIG_PREBOOT

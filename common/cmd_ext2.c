@@ -104,6 +104,7 @@ int do_ext2ls (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 	}
 	dev = (int)simple_strtoul (argv[2], &ep, 16);
 	dev_desc=get_dev(argv[1],dev);
+
 	if (dev_desc == NULL) {
 		printf ("\n** Block device %s %d not supported\n", argv[1], dev);
 		return(1);
@@ -121,7 +122,7 @@ int do_ext2ls (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 	    filename = argv[3];
 	}
 
-	PRINTF ("Using device %s %d:%d, directory: %s\n", argv[1], dev, part, filename);
+	PRINTF("Using device %s %d:%d, directory: %s\n", argv[1], dev, part, filename);
 
 	if ((part_length = ext2fs_set_blk_dev(dev_desc, part)) == 0) {
 		printf ("** Bad partition - %s %d:%d **\n",  argv[1], dev, part);
@@ -219,7 +220,7 @@ int do_ext2load (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 		part = (int)simple_strtoul(++ep, NULL, 16);
 	}
 
-	PRINTF ("Using device %s%d, partition %d\n", argv[1], dev, part);
+	PRINTF("Using device %s%d, partition %d\n", argv[1], dev, part);
 
 	if (part != 0) {
 		if (get_partition_info (dev_desc, part, &info)) {

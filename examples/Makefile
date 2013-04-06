@@ -121,10 +121,10 @@ $(LIB): .depend $(LIBOBJS)
 	$(LD) -g $(EX_LDFLAGS) -Ttext $(LOAD_ADDR) \
 		-o $@ -e $(<:.o=) $< $(LIB) \
 		-L$(gcclibdir) -lgcc
-%.srec:	%
+%.srec:	%.o
 	$(OBJCOPY) -O srec $< $@ 2>/dev/null
 
-%.bin:	%
+%.bin:	%.o
 	$(OBJCOPY) -O binary $< $@ 2>/dev/null
 
 #########################################################################

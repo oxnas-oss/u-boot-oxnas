@@ -29,31 +29,25 @@
 #define writeb(v, p) (*(volatile u8 *)(p)= (v))
 #define writel(v, p) (*(volatile u32*)(p)=(v))
 
+#define CFG_FLASH_EMPTY_INFO
 
 /**
  * Architecture
  */
 #define CONFIG_ARM926EJS    1
 #define CONFIG_OXNAS        1
-//#define CONFIG_OXNAS_RESET_DELAY    1
-#define CONFIG_OXNAS_USE_SATA   1
-//#define CONFIG_OXNAS_USE_PCI    1
-#define CONFIG_OXNAS_FEEDBACK_PCI_CLKS  1
-#define CONFIG_OXNAS_MANUAL_STATIC_ARBITRATION  1
-#define BOOT_FROM_SATA      1
-
-#ifdef BOOT_FROM_SATA
-#define CFG_NO_FLASH
-#endif // BOOT_FROM_SATA
-
-/* Shall we overclock the CPU? */
-#define PLL_400MHZ   0x00003014
-#define PLL_425MHZ   0x00002b10
-#define PLL_437_5MHZ 0x00003e18
-#define PLL_466MHZ   0x00003010
-#define PLL_500MHZ   0x00003410
-#define PLL_533MHZ   0x00003810
-//#define OXNAS_OVERCLOCK (PLL_533MHZ)
+#define CONFIG_OXNAS_ENABLE_PCI         /* Enables PCI clock and takes out of reset - needed if require access to static bus */
+#define CONFIG_OXNAS_FEEDBACK_PCI_CLKS  /* Feedback PCI clock out 3 to drive PCI core clock - needed if require access to static bus */
+#define CONFIG_OXNAS_MANUAL_STATIC_ARBITRATION
+#if (USE_SATA == 1)
+#define CONFIG_OXNAS_USE_SATA           /* Define to include support for SATA disks */
+#if (USE_SATA_ENV == 1)
+#define ENV_ON_SATA                     /* Define to have the U-Boot env. stored on SATA disk */
+#endif // USE_SATA_ENV
+#endif // USE_SATA
+#if (USE_FLASH == 0)
+#define CFG_NO_FLASH                    /* Define to NOT include flash support on static bus*/
+#endif //USE_FLASH
 
 /* Won't be using any interrupts */
 #undef CONFIG_USE_IRQ
@@ -105,20 +99,18 @@
  */
 #define CONFIG_NR_DRAM_BANKS    1           /* We have 1 bank of SDRAM */
 #define PHYS_SDRAM_1_PA         0x48000000  /* SDRAM Bank #1 */
-#define PHYS_SDRAM_1_SIZE       0x02000000  /* 32 MB */
-#define SRAM_BASE_PA            0x4C000000
+#if (NAS_VERSION == 810)
+#define PHYS_SDRAM_1_MAX_SIZE	 (256 * 1024 * 1024)
+#endif // NAS_VERSION
+#define CFG_SRAM_BASE           ((PHYS_SDRAM_1_PA) + (PHYS_SDRAM_1_MAX_SIZE))
+#if (NAS_VERSION == 810)
+#define CFG_SRAM_SIZE			 (128 * 1024)
+#endif // NAS_VERSION
+
 #define INITIALISE_SDRAM
 
 /* Default location from which bootm etc will load */
 #define CFG_LOAD_ADDR   (PHYS_SDRAM_1_PA)
-
-#define CFG_MEMTEST_START   (PHYS_SDRAM_1_PA)
-#define CFG_MEMTEST_END     ((PHYS_SDRAM_1_PA) + (PHYS_SDRAM_1_SIZE))
-
-/**
- * Can we expect the ROM loader to have setup static etc. already?
- */
-#define OXNAS_STANDALONE
 
 /**
  * Core addresses
@@ -147,9 +139,13 @@
 #define STATIC_CONTROL_BANK2    ((STATIC_CONTROL_BASE_PA) + 0xC)
 
 /* Clock to the ARM/DDR */
-#define NOMINAL_ARMCLK  ((NOMINAL_PLL400_FREQ) / 2)
-#define NOMINAL_SYSCLK  ((NOMINAL_PLL400_FREQ) / 4)
-#define NOMINAL_PCICLK  ((NOMINAL_PLL400_FREQ) / 12)
+#if (FPGA == 0)
+#define NOMINAL_ARMCLK  ((PLL400) / 2)
+#define NOMINAL_SYSCLK  ((PLL400) / 4)
+#else // !FPGA
+#define NOMINAL_ARMCLK  (FPGA_ARM_CLK)
+#define NOMINAL_SYSCLK  ((PLL400) / 4)
+#endif // !FPGA
 
 /**
  * Timer
@@ -167,7 +163,7 @@
 #define TIMER_ENABLE_ENABLE      1
 
 #define TIMER_PRESCALE_ENUM      (TIMER_PRESCALE_256_ENUM)
-#define CFG_HZ                   ((NOMINAL_RPSCLK_FREQ) / 256)
+#define CFG_HZ                   ((RPSCLK) / 256)
 
 /**
  * GPIO
@@ -183,7 +179,6 @@
 /**
  * Serial Configuration
  */
-//#define EXTERNAL_UART
 #define EXT_UART_BASE       0x28000000
 
 #define UART_1_BASE (APB_BRIDGE_A_BASE_PA + 0x200000)
@@ -195,21 +190,26 @@
 #define CFG_NS16550_SERIAL   1
 #define CFG_NS16550_REG_SIZE 1
 
-#ifdef EXTERNAL_UART
+#if (USE_EXTERNAL_UART != 0)
 #define CFG_NS16550_CLK      16000000
 #define CFG_NS16550_COM1     (EXT_UART_BASE)
-#else // EXTERNAL_UART
+#else // USE_EXTERNAL_UART
 #define CFG_NS16550_CLK      (NOMINAL_SYSCLK)
 #define USE_UART_FRACTIONAL_DIVIDER
-//#define CONFIG_OXNAS_UART1
+#if (INTERNAL_UART == 1)
+#define CONFIG_OXNAS_UART1
+#define CFG_NS16550_COM1     (UART_1_BASE)
+#elif (INTERNAL_UART == 2)
 #define CONFIG_OXNAS_UART2
-//#define CONFIG_OXNAS_UART3
-//#define CONFIG_OXNAS_UART4
 #define CFG_NS16550_COM1     (UART_2_BASE)
-//#define CFG_NS16550_COM2     (UART_2_BASE)
-//#define CFG_NS16550_COM3     (UART_3_BASE)
-//#define CFG_NS16550_COM4     (UART_4_BASE)
-#endif // EXTERNAL_UART
+#elif (INTERNAL_UART == 3)
+#define CONFIG_OXNAS_UART3
+#define CFG_NS16550_COM1     (UART_3_BASE)
+#else
+#define CONFIG_OXNAS_UART4
+#define CFG_NS16550_COM1     (UART_4_BASE)
+#endif // CONFIG_OXNAS_UART
+#endif // USE_EXTERNAL_UART
 
 #define CONFIG_CONS_INDEX    1
 #define CONFIG_BAUDRATE      115200
@@ -218,20 +218,27 @@
 /**
  * Monitor commands
  */
-#define NON_FLASH_COMMANDS (CFG_CMD_IMI    | \
-                            CFG_CMD_BDI    | \
-                            CFG_CMD_NET    | \
-                            CFG_CMD_ENV    | \
-                            CFG_CMD_RUN    | \
-                            CFG_CMD_MEMORY | \
-                            CFG_CMD_IDE    | \
-                            CFG_CMD_EXT2)
+#define BASE_COMMANDS (CFG_CMD_IMI    | \
+                       CFG_CMD_BDI    | \
+                       CFG_CMD_NET    | \
+                       CFG_CMD_PING   | \
+                       CFG_CMD_ENV    | \
+                       CFG_CMD_RUN    | \
+                       CFG_CMD_MEMORY)
 
 #ifdef CFG_NO_FLASH
-#define CONFIG_COMMANDS (NON_FLASH_COMMANDS)
+#define FLASH_COMMANDS (BASE_COMMANDS)
 #else
-#define CONFIG_COMMANDS (NON_FLASH_COMMANDS | CFG_CMD_FLASH)
-#endif // BOOT_FROM_SATA
+#define FLASH_COMMANDS (BASE_COMMANDS | CFG_CMD_FLASH)
+#endif // CFG_NO_FLASH
+
+#ifdef CONFIG_OXNAS_USE_SATA
+#define SATA_COMMANDS (FLASH_COMMANDS | CFG_CMD_IDE | CFG_CMD_EXT2 | CFG_CMD_LEDFAIL)
+#else
+#define SATA_COMMANDS (FLASH_COMMANDS)
+#endif // CONFIG_OXNAS_USE_SATA
+
+#define CONFIG_COMMANDS SATA_COMMANDS
 
 /* This must be included AFTER the definition of CONFIG_COMMANDS */
 #include <cmd_confdefs.h>
@@ -239,14 +246,28 @@
 /**
  * Booting
  */
-#define CONFIG_BOOTDELAY            2
-#define CONFIG_BOOTARGS             "mem=32M console=ttyS0,115200 root=/dev/md1 netdev=0,0,0x0030e000,0x0001,eth0 elevator=cfq"
-#define CONFIG_BOOTCOMMAND          "run select0 load boot || run select1 load boot"
+#if (LINUX_ROOT_RAIDED == 1)
+#define LINUX_ROOT_DEVICE "root=/dev/md1"
+#else
+#define LINUX_ROOT_DEVICE "root=/dev/sda1"
+#endif
+#define CONFIG_BOOTARGS LINUX_ROOT_DEVICE " console=ttyS0,115200 elevator=cfq gmac.mac_adr=0x00,0x30,0xe0,0x00,0x00,0x01"
+
+#ifdef CONFIG_OXNAS_USE_SATA
+#define CONFIG_BOOTDELAY	2
+#define CONFIG_BOOTCOMMAND	"run select0 load boot || run select0 load2 boot || run lightled select1 load extinguishled boot || run lightled select1 load2 extinguishled boot || lightled"
 #define CONFIG_EXTRA_ENV_SETTINGS \
     "select0=ide dev 0\0" \
     "select1=ide dev 1\0" \
     "load=ide read 0x48500000 12c 1644\0" \
+    "load2=ide read 0x48500000 2a6e 1644\0" \
+	"lightled=ledfail 1\0" \
+	"extinguishled=ledfail 0\0" \
     "boot=bootm 48500000\0"
+#else // CONFIG_OXNAS_USE_SATA
+#define CONFIG_BOOTDELAY	15
+#define CONFIG_BOOTCOMMAND	"bootm 0x41020000"
+#endif // CONFIG_OXNAS_USE_SATA
 
 //#define CONFIG_SHOW_BOOT_PROGRESS   1
 
@@ -262,20 +283,14 @@
 #define CONFIG_NET_RETRY_COUNT 30
 
 /**
- * Environment organization
+ * Flash support
  */
-#ifdef BOOT_FROM_SATA
-/* Boot from SATA, no flash in use */
-#define CFG_ENV_IS_IN_DISK
-#define CFG_ENV_ADDR        (SRAM_BASE_PA + 0x5c00)
-#define CFG_ENV_SIZE        (8*1024)
-#define CFG_ENV_DISK_SECTOR 47
+#ifndef CFG_NO_FLASH
 
-#else
-/* Boot from flash */
+#define FORCE_TOP_BOOT_FLASH	1
 
-//#define CFG_FLASH_CFI
-//#define CFG_FLASH_CFI_DRIVER
+#define CFG_FLASH_CFI			1
+#define CFG_FLASH_CFI_DRIVER	1
 
 #define NUM_FLASH_MAIN_BLOCKS   63          /* For Intel 28F320B3T */
 #define NUM_FLASH_PARAM_BLOCKS  8           /* For Intel 28F320B3T */
@@ -295,6 +310,27 @@
 #define CFG_FLASH_WRITE_TOUT    (20*CFG_HZ)	/* Timeout for Flash Write */
 #define CFG_FLASH_WRITE_ATTEMPTS 5
 
+#define STATIC_BUS_FLASH_CONFIG 0x4f1f3f3f  /* Slow ASIC settings */
+
+#endif // !CFG_NO_FLASH
+
+/**
+ * Environment organization
+ */
+#ifdef ENV_ON_SATA
+
+/* Environment on SATA disk */
+#define SIZE_TO_SECTORS(x) ((x) / 512)
+#define CFG_ENV_IS_IN_DISK
+#define CFG_ENV_SIZE			(8*1024)
+#define ENVIRONMENT_OFFSET		((CFG_SRAM_SIZE) - (CFG_ENV_SIZE) - 1024)
+#define CFG_ENV_ADDR			((CFG_SRAM_BASE) + (ENVIRONMENT_OFFSET))
+#define ROM_LOADER_LOAD_START_SECTOR 1
+#define CFG_ENV_DISK_SECTOR 	((ROM_LOADER_LOAD_START_SECTOR) + SIZE_TO_SECTORS(ENVIRONMENT_OFFSET))
+#define ROM_LOADER_LOAD_REDUNDANT_START_SECTOR 10608
+#define CFG_ENV_DISK_REDUNDANT_SECTOR ((ROM_LOADER_LOAD_REDUNDANT_START_SECTOR) + SIZE_TO_SECTORS(ENVIRONMENT_OFFSET))
+
+#else
 /** Flash based environment
  *
  *  It appears that all flash env start/size info. has to be pre-defined. How
@@ -318,14 +354,28 @@
 /* Backup environment occupies second parameter block */
 #define CFG_ENV_ADDR_REDUND ((CFG_ENV_ADDR)+(CFG_ENV_SIZE))
 
-//#define STATIC_BUS_FLASH_CONFIG 0x44020686  /* Almost reliable for U-Boot, fine for Abatron */
-//#define STATIC_BUS_FLASH_CONFIG 0x40020282  /* J.M.'s theoretical setttings - don't work with Abatron or U-Boot */
-//#define STATIC_BUS_FLASH_CONFIG 0x4c1f3f3f  /* Slowest timings */
-//#define STATIC_BUS_FLASH_CONFIG 0x44020383  /* Fastest at which Abatron things it programs OK, although comparison has shown a difference */
-#define STATIC_BUS_FLASH_CONFIG 0x40080888  /* Fast ASIC settings */
-#endif // BOOT_FROM_SATA
+#endif // ENV_ON_SATA
 
 #define CONFIG_ENV_OVERWRITE
+
+/* Magic number that indicates rebooting into upgrade mode */
+#define UPGRADE_MAGIC 0x31	/* ASCII '1' */
+
+/* Magic number that indicates user recovery on reboot */
+/* Also defined in oxnas_user_recovery.agent */
+#define RECOVERY_MAGIC 0x31    /* ASCII '1' */
+
+/* Magic number that indicates controlled power down on reboot */
+/* Also defined in controlled_power_down.sh in init.d */
+#define CONTROLLED_POWER_DOWN_MAGIC 0x31  /* ASCII '1' */
+
+/* This flag is set in SRAM location by Co Proc */
+#define CONTROLLED_POWER_UP_MAGIC  0x31 /* ASCII '1' */
+/* 9k + a quad from top */
+/* Be carefule on changing the location of this flag
+ * u-boot has other things to write in SRAM too
+ */
+#define POWER_ON_FLAG_SRAM_OFFSET 	9220
 
 /* Size of malloc() pool */
 #define CFG_MALLOC_LEN      (CFG_ENV_SIZE + 128*1024)
@@ -336,7 +386,7 @@
  */
 /* Start of address within SRAM of loader's exception table. */
 /* ROM-based exception table will redirect to here */
-#define EXCEPTION_BASE  (SRAM_BASE_PA)
+#define EXCEPTION_BASE  (CFG_SRAM_BASE)
 
 /**
  * Disk related stuff
@@ -372,6 +422,7 @@
 #define SYS_CTRL_RSTEN_CLR_CTRL       (SYS_CONTROL_BASE_PA + 0x38)
 #define SYS_CTRL_PLLSYS_CTRL          (SYS_CONTROL_BASE_PA + 0x48)
 #define SYS_CTRL_PLLSYS_KEY_CTRL      (SYS_CONTROL_BASE_PA + 0x6C)
+#define SYS_CTRL_GMAC_CTRL            (SYS_CONTROL_BASE_PA + 0x78)
 #define SYS_CTRL_UART_CTRL            (SYS_CONTROL_BASE_PA + 0x94)
 
 #define SYS_CTRL_CKEN_COPRO_BIT  0
@@ -384,29 +435,36 @@
 #define SYS_CTRL_CKEN_MAC_BIT    7
 #define SYS_CTRL_CKEN_PCI_BIT    8
 #define SYS_CTRL_CKEN_STATIC_BIT 9
+#define SYS_CTRL_CKEN_DDR_PHY_BIT 10
 
-#define SYS_CTRL_RSTEN_ARM_BIT      0
-#define SYS_CTRL_RSTEN_COPRO_BIT    1
-#define SYS_CTRL_RSTEN_USBHS_BIT    4
-#define SYS_CTRL_RSTEN_USBHSPHY_BIT 5
-#define SYS_CTRL_RSTEN_MAC_BIT      6
-#define SYS_CTRL_RSTEN_PCI_BIT      7
-#define SYS_CTRL_RSTEN_DMA_BIT      8
-#define SYS_CTRL_RSTEN_DPE_BIT      9
-#define SYS_CTRL_RSTEN_DDR_BIT      10
-#define SYS_CTRL_RSTEN_SATA_BIT     11
-#define SYS_CTRL_RSTEN_SATA_PHY_BIT 12
-#define SYS_CTRL_RSTEN_STATIC_BIT   15
-#define SYS_CTRL_RSTEN_GPIO_BIT     16
-#define SYS_CTRL_RSTEN_UART1_BIT    17
-#define SYS_CTRL_RSTEN_UART2_BIT    18
-#define SYS_CTRL_RSTEN_MISC_BIT     19
-#define SYS_CTRL_RSTEN_I2S_BIT      20
-#define SYS_CTRL_RSTEN_AHB_MON_BIT  21
-#define SYS_CTRL_RSTEN_UART3_BIT    22
-#define SYS_CTRL_RSTEN_UART4_BIT    23
-#define SYS_CTRL_RSTEN_SGDMA_BIT    24
-#define SYS_CTRL_RSTEN_BUS_BIT      31
+#define SYS_CTRL_RSTEN_ARM_BIT          0
+#define SYS_CTRL_RSTEN_COPRO_BIT        1
+#define SYS_CTRL_RSTEN_USBHS_BIT        4
+#define SYS_CTRL_RSTEN_USBHSPHY_BIT     5
+#define SYS_CTRL_RSTEN_MAC_BIT          6
+#define SYS_CTRL_RSTEN_PCI_BIT          7
+#define SYS_CTRL_RSTEN_DMA_BIT          8
+#define SYS_CTRL_RSTEN_DPE_BIT          9
+#define SYS_CTRL_RSTEN_DDR_BIT          10
+#define SYS_CTRL_RSTEN_SATA_BIT         11
+#define SYS_CTRL_RSTEN_SATA_LINK_BIT    12
+#define SYS_CTRL_RSTEN_SATA_PHY_BIT     13
+#define SYS_CTRL_RSTEN_STATIC_BIT       15
+#define SYS_CTRL_RSTEN_GPIO_BIT         16
+#define SYS_CTRL_RSTEN_UART1_BIT        17
+#define SYS_CTRL_RSTEN_UART2_BIT        18
+#define SYS_CTRL_RSTEN_MISC_BIT         19
+#define SYS_CTRL_RSTEN_I2S_BIT          20
+#define SYS_CTRL_RSTEN_AHB_MON_BIT      21
+#define SYS_CTRL_RSTEN_UART3_BIT        22
+#define SYS_CTRL_RSTEN_UART4_BIT        23
+#define SYS_CTRL_RSTEN_SGDMA_BIT        24
+#define SYS_CTRL_RSTEN_DDR_PHY_BIT      25
+#define SYS_CTRL_RSTEN_BUS_BIT          31
+
+#define SYS_CTRL_GMAC_RGMII         2
+#define SYS_CTRL_GMAC_SIMPLE_MAX    1
+#define SYS_CTRL_GMAC_CKEN_GTX      0
 
 #define SYS_CTRL_CKCTRL_CTRL_ADDR     (SYS_CONTROL_BASE_PA + 0x64)
 
@@ -433,10 +491,9 @@
 #define ATA_PORT_DEVICE     6
 #define ATA_PORT_COMMAND    7
 
-#define SATA_0_REGS_BASE (APB_BRIDGE_B_BASE_PA + 0x900000)
-#define SATA_0_LINK_BASE (APB_BRIDGE_B_BASE_PA + 0x940000)
-#define SATA_1_REGS_BASE (APB_BRIDGE_B_BASE_PA + 0x980000)
-#define SATA_1_LINK_BASE (APB_BRIDGE_B_BASE_PA + 0x9c0000)
+#define SATA_0_REGS_BASE    (APB_BRIDGE_B_BASE_PA + 0x900000)
+#define SATA_1_REGS_BASE    (APB_BRIDGE_B_BASE_PA + 0x910000)
+#define SATA_HOST_REGS_BASE (APB_BRIDGE_B_BASE_PA + 0x9e0000)
 
 /* The offsets to the SATA registers */
 #define SATA_ORB1_OFF           0
@@ -452,24 +509,41 @@
 #define SATA_INT_ENABLE_SET_OFF 13  /* Write only */
 #define SATA_INT_ENABLE_CLR_OFF 14  /* Write only */
 #define SATA_VERSION_OFF        15
-#define SATA_BURST_BUF_CTRL_OFF 18
 #define SATA_CONTROL_OFF        23
 #define SATA_COMMAND_OFF        24
-#define SATA_DEVICE_SELECT_OFF  25
-#define SATA_DEVICE_CONTROL_OFF 26
-#define SATA_DRIVE_CONTROL_OFF  27
+#define SATA_PORT_CONTROL_OFF   25
+#define SATA_DRIVE_CONTROL_OFF  26
 
 /* The offsets to the link registers that are access in an asynchronous manner */
-#define OX800SATA_LINK_DATA     (0x00000000)
-#define OX800SATA_LINK_RD_ADDR  (0x00000001)
-#define OX800SATA_LINK_WR_ADDR  (0x00000002)
-#define OX800SATA_LINK_CONTROL  (0x00000003)
+#define SATA_LINK_DATA     28
+#define SATA_LINK_RD_ADDR  29
+#define SATA_LINK_WR_ADDR  30
+#define SATA_LINK_CONTROL  31
 
 /* SATA interrupt status register fields */
-#define SATA_INT_STATUS_EOC_RAW_BIT     8
-#define SATA_INT_STATUS_EODC_RAW_BIT    9
-#define SATA_INT_STATUS_ERROR_BIT       10
-#define SATA_INT_STATUS_EOADT_RAW_BIT   13
+#define SATA_INT_STATUS_EOC_RAW_BIT     ( 0 + 16)
+#define SATA_INT_STATUS_ERROR_BIT       ( 2 + 16)
+#define SATA_INT_STATUS_EOADT_RAW_BIT   ( 1 + 16)
+
+/* SATA core command register commands */
+#define SATA_CMD_WRITE_TO_ORB_REGS              2
+#define SATA_CMD_WRITE_TO_ORB_REGS_NO_COMMAND   4
+
+#define SATA_CMD_BUSY_BIT 7
+
+#define SATA_SCTL_CLR_ERR 0x00000316UL
+
+#define SATA_OPCODE_MASK 0x3
+
+#define SATA_LBAL_BIT    0
+#define SATA_LBAM_BIT    8
+#define SATA_LBAH_BIT    16
+#define SATA_HOB_LBAH_BIT 24
+#define SATA_DEVICE_BIT  24
+#define SATA_NSECT_BIT   0
+#define SATA_FEATURE_BIT 16
+#define SATA_COMMAND_BIT 24
+#define SATA_CTL_BIT     24
 
 /* ATA status (7) register field definitions */
 #define ATA_STATUS_BSY_BIT     7
@@ -491,25 +565,6 @@
 #define ATA_CMD_INIT    0x91
 #define ATA_CMD_IDENT   0xEC
 
-/* SATA core command register commands */
-#define SATA_CMD_WRITE_TO_ORB_REGS_NO_COMMAND   1
-#define SATA_CMD_WRITE_TO_ORB_REGS              2
-#define SATA_CMD_READ_ALL_REGS                  3
-#define SATA_CMD_READ_STATUS_REG                4
-
-#define SATA_CMD_BUSY_BIT 7
-
-#define SATA_OPCODE_MASK 0x3
-
-#define SATA_LBAL_BIT    0
-#define SATA_LBAM_BIT    8
-#define SATA_LBAH_BIT    16
-#define SATA_DEVICE_BIT  24
-#define SATA_NSECT_BIT   0
-#define SATA_FEATURE_BIT 16
-#define SATA_COMMAND_BIT 24
-#define SATA_CTL_BIT     24
-
 #define SATA_STD_ASYNC_REGS_OFF 0x20
 #define SATA_SCR_STATUS      0
 #define SATA_SCR_ERROR       1
@@ -525,16 +580,6 @@
 #define SATA_BURST_BUF_DIS_DREQ_BIT         5
 #define SATA_BURST_BUF_DREQ_BIT             6
 
-#if 0
-/* Button mapped to SW3 thru GPIO 2 */
-#define RECOVERY_BUTTON         (0x00000001 << 2)
-#define RECOVERY_PRISEL_REG     SYS_CTRL_GPIO_PRIMSEL_CTRL_0
-#define RECOVERY_SECSEL_REG     SYS_CTRL_GPIO_SECSEL_CTRL_0
-#define RECOVERY_TERSEL_REG     SYS_CTRL_GPIO_TERTSEL_CTRL_0
-#define RECOVERY_CLR_OE_REG     GPIO_1_CLR_OE
-#define RECOVERY_DEBOUNCE_REG   GPIO_1_INPUT_DEBOUNCE_ENABLE
-#define RECOVERY_DATA           GPIO_1_PA
-#else
 /* Button on GPIO 32 */
 #define RECOVERY_BUTTON         (0x00000001 << 0)
 #define RECOVERY_PRISEL_REG     SYS_CTRL_GPIO_PRIMSEL_CTRL_1
@@ -543,6 +588,5 @@
 #define RECOVERY_CLR_OE_REG     GPIO_2_CLR_OE
 #define RECOVERY_DEBOUNCE_REG   GPIO_2_INPUT_DEBOUNCE_ENABLE
 #define RECOVERY_DATA           GPIO_2_PA
-#endif
 
 #endif // CONFIG_H

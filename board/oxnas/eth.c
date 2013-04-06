@@ -24,6 +24,7 @@
 #include <common.h>
 #include <malloc.h>
 #include <net.h>
+#include <asm/barrier.h>
 
 //#define DEBUG_GMAC_INIT
 
@@ -38,6 +39,82 @@ static const u32 DMA_BASE_OFFSET = 0x1000;
 
 static const int NUM_TX_DMA_DESCRIPTORS = 1;
 static const int NUM_RX_DMA_DESCRIPTORS = 32;
+
+/* Generic MII registers. */
+#define MII_BMCR            0x00	/* Basic mode control register */
+#define MII_BMSR            0x01	/* Basic mode status register  */
+#define MII_PHYSID1         0x02	/* PHYS ID 1                   */
+#define MII_PHYSID2         0x03	/* PHYS ID 2                   */
+#define MII_ADVERTISE       0x04	/* Advertisement control reg   */
+#define MII_LPA             0x05	/* Link partner ability reg    */
+#define MII_EXPANSION       0x06	/* Expansion register          */
+#define MII_CTRL1000        0x09	/* 1000BASE-T control          */
+#define MII_STAT1000        0x0a	/* 1000BASE-T status           */
+#define MII_ESTATUS         0x0f	/* Extended Status */
+
+/* Basic mode control register. */
+#define BMCR_RESV          0x003f  /* Unused...                   */
+#define BMCR_SPEED1000		0x0040  /* MSB of Speed (1000)         */
+#define BMCR_CTST          0x0080  /* Collision test              */
+#define BMCR_FULLDPLX      0x0100  /* Full duplex                 */
+#define BMCR_ANRESTART     0x0200  /* Auto negotiation restart    */
+#define BMCR_ISOLATE       0x0400  /* Disconnect DP83840 from MII */
+#define BMCR_PDOWN         0x0800  /* Powerdown the DP83840       */
+#define BMCR_ANENABLE      0x1000  /* Enable auto negotiation     */
+#define BMCR_SPEED100      0x2000  /* Select 100Mbps              */
+#define BMCR_LOOPBACK      0x4000  /* TXD loopback bits           */
+#define BMCR_RESET         0x8000  /* Reset the DP83840           */
+
+/* Basic mode status register. */
+#define BMSR_ERCAP         0x0001  /* Ext-reg capability          */
+#define BMSR_JCD           0x0002  /* Jabber detected             */
+#define BMSR_LSTATUS       0x0004  /* Link status                 */
+#define BMSR_ANEGCAPABLE   0x0008  /* Able to do auto-negotiation */
+#define BMSR_RFAULT        0x0010  /* Remote fault detected       */
+#define BMSR_ANEGCOMPLETE  0x0020  /* Auto-negotiation complete   */
+#define BMSR_RESV          0x00c0  /* Unused...                   */
+#define BMSR_ESTATEN		0x0100	/* Extended Status in R15 */
+#define BMSR_100FULL2		0x0200	/* Can do 100BASE-T2 HDX */
+#define BMSR_100HALF2		0x0400	/* Can do 100BASE-T2 FDX */
+#define BMSR_10HALF        0x0800  /* Can do 10mbps, half-duplex  */
+#define BMSR_10FULL        0x1000  /* Can do 10mbps, full-duplex  */
+#define BMSR_100HALF       0x2000  /* Can do 100mbps, half-duplex */
+#define BMSR_100FULL       0x4000  /* Can do 100mbps, full-duplex */
+#define BMSR_100BASE4      0x8000  /* Can do 100mbps, 4k packets  */
+
+/* 1000BASE-T Status register */
+#define LPA_1000LOCALRXOK	0x2000  /* Link partner local receiver status */
+#define LPA_1000REMRXOK  	0x1000  /* Link partner remote receiver status */
+#define LPA_1000FULL     	0x0800  /* Link partner 1000BASE-T full duplex */
+#define LPA_1000HALF     	0x0400  /* Link partner 1000BASE-T half duplex */
+#define PHY_TYPE_NONE					0
+#define PHY_TYPE_MICREL_KS8721BL		0x00221619
+#define PHY_TYPE_VITESSE_VSC8201XVZ	0x000fc413
+#define PHY_TYPE_REALTEK_RTL8211BGR	0x001cc912
+#define PHY_TYPE_LSI_ET1011C			0x0282f013
+
+/* Specific PHY values */
+#define VSC8201_MII_ACSR			0x1c	// Vitesse VCS8201 gigabit PHY Auxillary Control and Status register
+#define VSC8201_MII_ACSR_MDPPS_BIT	2		// Mode/Duplex Pin Priority Select
+
+#define ET1011C_MII_CONFIG	0x16
+#define ET1011C_MII_CONFIG_IFMODESEL	0
+#define ET1011C_MII_CONFIG_IFMODESEL_NUM_BITS	3
+#define ET1011C_MII_CONFIG_SYSCLKEN	4
+#define ET1011C_MII_CONFIG_TXCLKEN		5
+#define ET1011C_MII_CONFIG_TBI_RATESEL	8
+#define ET1011C_MII_CONFIG_CRS_TX_EN	15
+
+#define ET1011C_MII_CONFIG_IFMODESEL_GMII_MII		0
+#define ET1011C_MII_CONFIG_IFMODESEL_TBI			1
+#define ET1011C_MII_CONFIG_IFMODESEL_GMII_MII_GTX	2
+
+#define ET1011C_MII_LED2 0x1c
+#define ET1011C_MII_LED2_LED_TXRX		12
+#define ET1011C_MII_LED2_LED_NUM_BITS	4
+
+#define ET1011C_MII_LED2_LED_TXRX_ON		0xe
+#define ET1011C_MII_LED2_LED_TXRX_ACTIVITY	0x7
 
 // Some typedefs to cope with std Linux types
 typedef void sk_buff_t;
@@ -86,6 +163,12 @@ typedef struct gmac_priv
     /** Descriptor list management */
     gmac_desc_list_info_t   tx_gmac_desc_list_info;
     gmac_desc_list_info_t   rx_gmac_desc_list_info;
+
+	/** PHY info */
+	u32						 phy_type;
+	u32						 phy_addr;
+	int						 phy_id;
+	int						 link_is_1000M;
 } gmac_priv_t;
 
 /**
@@ -482,7 +565,7 @@ typedef enum rx_desc_status {
     RX_DESC_STATUS_FT_BIT   = 5,
     RX_DESC_STATUS_RWT_BIT  = 4,
     RX_DESC_STATUS_RE_BIT   = 3,
-    RX_DESC_STATUS_DE_BIT   = 2,
+    RX_DESC_STATUS_DRE_BIT  = 2,
     RX_DESC_STATUS_CE_BIT   = 1,
     RX_DESC_STATUS_MAC_BIT  = 0
 } rx_desc_status_t;
@@ -753,9 +836,6 @@ static int set_tx_descriptor(
     // Get a pointer to the next TX descriptor available for writing by the CPU
     tx = priv->tx_gmac_desc_list_info.base_ptr + index;
 
-    // Initialise TX descriptor status to be owned by the GMAC DMA
-    tx->status = (1UL << TX_DESC_STATUS_OWN_BIT);
-
     // Initialise the TX descriptor length field for the passed single buffer,
     // without destroying any fields we wish to be persistent
 
@@ -778,6 +858,12 @@ static int set_tx_descriptor(
 
     // Update the index of the next descriptor available for writing by the CPU
     priv->tx_gmac_desc_list_info.w_index = (tx->length & (1UL << TX_DESC_LENGTH_TER_BIT)) ? 0 : index + 1;
+
+    // make sure all memory updates are complete before releasing the GMAC on the data.
+    wmb();
+
+    // Hand TX descriptor to the GMAC DMA by setting the status bit.
+    tx->status = (1UL << TX_DESC_STATUS_OWN_BIT);
 
     // Account for the number of descriptors used to hold the new packet
     --priv->tx_gmac_desc_list_info.empty_count;
@@ -867,9 +953,6 @@ int set_rx_descriptor(
         // Get a pointer to the next RX descriptor available for writing by the CPU
         rx = priv->rx_gmac_desc_list_info.base_ptr + index;
 
-        // Initialise RX descriptor status to be owned by the GMAC DMA
-        rx->status = (1UL << RX_DESC_STATUS_OWN_BIT);
-
         // Initialise the RX descriptor length field for the passed single buffer,
         // without destroying any fields we wish to be persistent
 
@@ -887,6 +970,11 @@ int set_rx_descriptor(
 
         // Remember the socket buffer associated with the single passed buffer
         rx->skb = (u32)skb;
+
+        wmb();
+
+        // Initialise RX descriptor status to be owned by the GMAC DMA
+        rx->status = (1UL << RX_DESC_STATUS_OWN_BIT);
 
         // Update the index of the next descriptor available for writing by the CPU
         priv->rx_gmac_desc_list_info.w_index = (rx->length & (1UL << RX_DESC_LENGTH_RER_BIT)) ? 0 : index + 1;
@@ -950,6 +1038,7 @@ int get_rx_descriptor(
         *skb = (sk_buff_t*)(rx->skb);
     }
 
+    wmb();
     // Update the index of the next descriptor with which the GMAC DMA may have
     // finished
     priv->rx_gmac_desc_list_info.r_index = (rx->length & (1UL << RX_DESC_LENGTH_RER_BIT)) ? 0 : index + 1;
@@ -985,6 +1074,7 @@ static inline u32 mac_reg_read(gmac_priv_t* priv, int reg_num)
 static inline void mac_reg_write(gmac_priv_t* priv, int reg_num, u32 value)
 {
     *(volatile u32*)(priv->macBase + (reg_num << 2)) = value;
+
 }
 
 /**
@@ -1032,6 +1122,7 @@ static inline u32 dma_reg_read(gmac_priv_t* priv, int reg_num)
 static inline void dma_reg_write(gmac_priv_t* priv, int reg_num, u32 value)
 {
     *(volatile u32*)(priv->dmaBase + (reg_num << 2)) = value;
+    wmb();
 }
 
 /**
@@ -1101,9 +1192,191 @@ static void eth_down(void)
     }
 }
 
-/**
- * Implementations of U-Boot Ethernet implementation API
+/*
+ * Reads a register from the MII Management serial interface
  */
+int phy_read(int phyaddr, int phyreg)
+{
+    int data = 0;
+    u32 addr = (phyaddr << MAC_GMII_ADR_PA_BIT) |
+               (phyreg << MAC_GMII_ADR_GR_BIT) |
+               (5 << MAC_GMII_ADR_CR_BIT) |
+               (1UL << MAC_GMII_ADR_GB_BIT);
+
+    mac_reg_write(priv, MAC_GMII_ADR_REG, addr);
+
+    for (;;) {
+        if (!(mac_reg_read(priv, MAC_GMII_ADR_REG) & (1UL << MAC_GMII_ADR_GB_BIT))) {
+            // Successfully read from PHY
+            data = mac_reg_read(priv, MAC_GMII_DATA_REG) & 0xFFFF;
+            break;
+        }
+    }
+
+#ifdef DEBUG_GMAC_INIT
+    printf("phy_read() phyaddr=0x%x, phyreg=0x%x, phydata=0x%x\n", phyaddr, phyreg, data);
+#endif // DEBUG_GMAC_INIT
+
+    return data;
+}
+
+/*
+ * Writes a register to the MII Management serial interface
+ */
+void phy_write(int phyaddr, int phyreg, int phydata)
+{
+    u32 addr = (phyaddr << MAC_GMII_ADR_PA_BIT) |
+               (phyreg << MAC_GMII_ADR_GR_BIT) |
+               (5 << MAC_GMII_ADR_CR_BIT) |
+               (1UL << MAC_GMII_ADR_GW_BIT) |
+               (1UL << MAC_GMII_ADR_GB_BIT);
+
+    mac_reg_write(priv, MAC_GMII_DATA_REG, phydata);
+    mac_reg_write(priv, MAC_GMII_ADR_REG, addr);
+
+    for (;;) {
+        if (!(mac_reg_read(priv, MAC_GMII_ADR_REG) & (1UL << MAC_GMII_ADR_GB_BIT))) {
+            break;
+        }
+    }
+
+#ifdef DEBUG_GMAC_INIT
+    printf("phy_write() phyaddr=0x%x, phyreg=0x%x, phydata=0x%x\n", phyaddr, phyreg, phydata);
+#endif // DEBUG_GMAC_INIT
+}
+
+/*
+ * Finds and reports the PHY address
+ */
+int phy_detect(void)
+{
+	int found = 0;
+    int phyaddr;
+
+    // Scan all 32 PHY addresses if necessary
+    priv->phy_type = 0;
+    for (phyaddr = 1; phyaddr < 33; ++phyaddr) {
+        unsigned int id1, id2;
+
+        // Read the PHY identifiers
+        id1 = phy_read(phyaddr & 31, MII_PHYSID1);
+        id2 = phy_read(phyaddr & 31, MII_PHYSID2);
+
+#ifdef DEBUG_GMAC_INIT
+        printf("phy_detect() PHY adr = %u -> phy_id1=0x%x, phy_id2=0x%x\n", phyaddr, id1, id2);
+#endif // DEBUG_GMAC_INIT
+
+        // Make sure it is a valid identifier
+        if (id1 != 0x0000 && id1 != 0xffff && id1 != 0x8000 &&
+            id2 != 0x0000 && id2 != 0xffff && id2 != 0x8000) {
+#ifdef DEBUG_GMAC_INIT
+            printf("phy_detect() Found PHY at address = %u\n", phyaddr);
+#endif // DEBUG_GMAC_INIT
+
+            priv->phy_id   = phyaddr & 31;
+            priv->phy_type = id1 << 16 | id2;
+            priv->phy_addr = phyaddr;
+
+			found = 1;
+            break;
+        }
+    }
+
+	return found;
+}
+
+void start_phy_reset(void)
+{
+    // Ask the PHY to reset
+    phy_write(priv->phy_addr, MII_BMCR, BMCR_RESET);
+}
+
+int is_phy_reset_complete(void)
+{
+    int complete = 0;
+    int bmcr;
+
+    // Read back the status until it indicates reset, or we timeout
+    bmcr = phy_read(priv->phy_addr, MII_BMCR);
+    if (!(bmcr & BMCR_RESET)) {
+        complete = 1;
+    }
+
+    return complete;
+}
+
+void set_phy_type_rgmii(void)
+{
+	// Use sysctrl to switch MAC link lines into either (G)MII or RGMII mode
+    *(volatile u32*)SYS_CTRL_GMAC_CTRL |= (1UL << SYS_CTRL_GMAC_RGMII);
+}
+
+void phy_initialise(void)
+{
+	switch (priv->phy_type) {
+		case PHY_TYPE_VITESSE_VSC8201XVZ:
+			{
+				// Allow s/w to override mode/duplex pin settings
+				u32 acsr = phy_read(priv->phy_id, VSC8201_MII_ACSR);
+
+				printf("PHY is Vitesse VSC8201XVZ\n");
+				acsr |= (1UL << VSC8201_MII_ACSR_MDPPS_BIT);
+				phy_write(priv->phy_id, VSC8201_MII_ACSR, acsr);
+			}
+			break;
+		case PHY_TYPE_REALTEK_RTL8211BGR:
+			printf("PHY is Realtek RTL8211BGR\n");
+			set_phy_type_rgmii();
+			break;
+		case PHY_TYPE_LSI_ET1011C:
+			{
+				u32 phy_reg;
+
+				printf("PHY is LSI ET1011C\n");
+
+				// Configure clocks
+				phy_reg = phy_read(priv->phy_id, ET1011C_MII_CONFIG);
+				phy_reg &= ~(((1UL << ET1011C_MII_CONFIG_IFMODESEL_NUM_BITS) - 1) << ET1011C_MII_CONFIG_IFMODESEL);
+				phy_reg |= (ET1011C_MII_CONFIG_IFMODESEL_GMII_MII << ET1011C_MII_CONFIG_IFMODESEL);
+				phy_reg |= ((1UL << ET1011C_MII_CONFIG_SYSCLKEN) |
+                              (1UL << ET1011C_MII_CONFIG_TXCLKEN) |
+							   (1UL << ET1011C_MII_CONFIG_TBI_RATESEL) |
+							   (1UL << ET1011C_MII_CONFIG_CRS_TX_EN));
+				phy_write(priv->phy_id, ET1011C_MII_CONFIG, phy_reg);
+
+				// Enable Tx/Rx LED
+				phy_reg = phy_read(priv->phy_id, ET1011C_MII_LED2);
+				phy_reg &= ~(((1UL << ET1011C_MII_LED2_LED_NUM_BITS) - 1) << ET1011C_MII_LED2_LED_TXRX);
+				phy_reg |= (ET1011C_MII_LED2_LED_TXRX_ACTIVITY << ET1011C_MII_LED2_LED_TXRX);
+				phy_write(priv->phy_id, ET1011C_MII_LED2, phy_reg);
+			}
+			break;
+	}
+}
+
+int detect_link_speed(void)
+{
+	u32 lpa2 = phy_read(priv->phy_id, MII_STAT1000);
+
+	if (((lpa2 & LPA_1000FULL)) ||
+		((lpa2 & LPA_1000HALF))) {
+		priv->link_is_1000M = 1;
+	} else {
+		priv->link_is_1000M = 0;
+	}
+
+	return 0;
+}
+
+int is_autoneg_complete(void)
+{
+    return phy_read(priv->phy_addr, MII_BMSR) & BMSR_ANEGCOMPLETE;
+}
+
+int is_link_ok(void)
+{
+	return phy_read(priv->phy_id, MII_BMSR) & BMSR_LSTATUS;
+}
 
 int eth_init(bd_t *bd)
 {
@@ -1131,6 +1404,12 @@ int eth_init(bd_t *bd)
     printf("eth_init(): GMAC Synopsis version = 0x%x, vendor version = 0x%x\n", version & 0xff, (version >> 8) & 0xff);
 #endif // DEBUG_GMAC_INIT
 
+    // Use simple mux for 25/125 Mhz clock switching
+    *(volatile u32*)SYS_CTRL_GMAC_CTRL |= (1UL << SYS_CTRL_GMAC_SIMPLE_MAX);
+
+    // Enable GMII_GTXCLK to follow GMII_REFCLK - required for gigabit PHY
+    *(volatile u32*)SYS_CTRL_GMAC_CTRL |= (1UL << SYS_CTRL_GMAC_CKEN_GTX);
+
     // Disable all GMAC interrupts
     dma_reg_write(priv, DMA_INT_ENABLE_REG, 0);
 
@@ -1138,16 +1417,59 @@ int eth_init(bd_t *bd)
     dma_reg_write(priv, DMA_BUS_MODE_REG, 1UL << DMA_BUS_MODE_SWR_BIT);
 
     // Wait for the reset operation to complete
-#ifdef DEBUG_GMAC_INIT
-    printf("eth_init(): Waiting for GMAC reset acknowledgement\n");
-#endif // DEBUG_GMAC_INIT
+	printf("Wait GMAC to reset");
     while (dma_reg_read(priv, DMA_BUS_MODE_REG) & (1UL << DMA_BUS_MODE_SWR_BIT)) {
-        udelay(1000); // Wait for 1mS
+		udelay(250000);
+		printf(".");
     }
+	printf("\n");
+
+	// Attempt to discover link speed from the PHY
+	if (!phy_detect()) {
+		printf("No PHY found\n");
+	} else {
+		// Ensure the PHY is in a sensible state by resetting it
+		start_phy_reset();
+
+		// Read back the status until it indicates reset, or we timeout
+		printf("Wait for PHY reset");
+		while (!is_phy_reset_complete()) {
+			udelay(250000);
+			printf(".");
+		}
+		printf("\n");
+
+		// Setup the PHY based on its type
+		phy_initialise();
+
+		printf("Wait for link to come up");
+		while (!is_link_ok()) {
+			udelay(250000);
+			printf(".");
+		}
+		printf("Link up\n");
+
+		// Wait for PHY to have completed autonegotiation
+		printf("Wait for auto-negotiation to complete");
+		while (!is_autoneg_complete()) {
+			udelay(250000);
+			printf(".");
+		}
+		printf("\n");
+
+		// Interrogate the PHY for the link speed
+		if (detect_link_speed()) {
+			printf("Failed to detect link speed\n");
+		} else {
+			printf("Link is %s\n", priv->link_is_1000M ? "1000M" : "10M/100M");
+		}
+	}
 
     // Form the MAC config register contents
     reg_contents = 0;
-    reg_contents |= (1UL << MAC_CONFIG_PS_BIT); // Gigabit
+	if (!priv->link_is_1000M) {
+		reg_contents |= (1UL << MAC_CONFIG_PS_BIT); // Gigabit
+	}
     reg_contents |= (1UL << MAC_CONFIG_DM_BIT); // Full duplex
     reg_contents |= ((1UL << MAC_CONFIG_TE_BIT) |
                      (1UL << MAC_CONFIG_RE_BIT));

@@ -65,7 +65,6 @@ int board_init(void)
 
     icache_enable();
 
-#ifdef OXNAS_STANDALONE
     /* Block reset Static core */
     *(volatile u32*)SYS_CTRL_RSTEN_SET_CTRL = (1UL << SYS_CTRL_RSTEN_STATIC_BIT);
     *(volatile u32*)SYS_CTRL_RSTEN_CLR_CTRL = (1UL << SYS_CTRL_RSTEN_STATIC_BIT);
@@ -73,14 +72,14 @@ int board_init(void)
     /* Enable clock to Static core */
     *(volatile u32*)SYS_CTRL_CKEN_SET_CTRL = (1UL << SYS_CTRL_CKEN_STATIC_BIT);
 
-#ifdef CONFIG_OXNAS_USE_PCI
+#ifdef CONFIG_OXNAS_ENABLE_PCI
     /* Block reset PCI core */
     *(volatile u32*)SYS_CTRL_RSTEN_SET_CTRL = (1UL << SYS_CTRL_RSTEN_PCI_BIT);
     *(volatile u32*)SYS_CTRL_RSTEN_CLR_CTRL = (1UL << SYS_CTRL_RSTEN_PCI_BIT);
 
     /* Enable clock to PCI core */
     *(volatile u32*)SYS_CTRL_CKEN_SET_CTRL = (1UL << SYS_CTRL_CKEN_PCI_BIT);
-#endif // CONFIG_OXNAS_USE_PCI
+#endif // CONFIG_OXNAS_ENABLE_PCI
 
 #ifdef CONFIG_OXNAS_MANUAL_STATIC_ARBITRATION
     /* Assert manual static bus PCI arbitration request */
@@ -96,23 +95,19 @@ int board_init(void)
 #endif // CONFIG_OXNAS_FEEDBACK_PCI_CLKS
 
 #ifndef CFG_NO_FLASH
-    /* Enable static bus onto GPIOs */
-    *(volatile u32*)SYS_CTRL_GPIO_PRIMSEL_CTRL_0 |= 0x007FF000;
+    /* Enable static bus onto GPIOs, only CS0 as CS1 conflicts with UART2 */
+    *(volatile u32*)SYS_CTRL_GPIO_PRIMSEL_CTRL_0 |= 0x002FF000;
 
     /* Setup the static bus CS0 to access FLASH */
     *(volatile u32*)STATIC_CONTROL_BANK0 = STATIC_BUS_FLASH_CONFIG;
-
-    /* Put flash into read array mode */
-    *(FLASH_WORD_SIZE*)CFG_FLASH_BASE = (FLASH_WORD_SIZE)0x00ff00ff;
 #endif // !CFG_NO_FLASH
 
     /* Set 33MHz PCI clock */
     *(volatile u32*)SYS_CTRL_CKCTRL_CTRL_ADDR = 5;
     /* Enable full speed RPS clock */
     *(volatile u32*)SYS_CTRL_CKCTRL_CTRL_ADDR &= ~(1UL << SYS_CTRL_CKCTRL_SLOW_BIT);
-#endif // OXNAS_STANDALONE
 
-#ifndef EXTERNAL_UART
+#if (USE_EXTERNAL_UART == 0)
 #ifdef CONFIG_OXNAS_UART1
     /* Block reset UART1 */
     *(volatile u32*)SYS_CTRL_RSTEN_SET_CTRL = (1UL << SYS_CTRL_RSTEN_UART1_BIT);
@@ -168,18 +163,13 @@ int board_init(void)
     // Enable UART4 to override PCI functions onto GPIOs
     *(volatile u32*)SYS_CTRL_UART_CTRL |= (1UL << SYS_CTRL_UART4_NOT_PCI_MODE);
 #endif // CONFIG_OXNAS_UART4
-#endif // !EXTERNAL_UART
+#endif // !USE_EXTERNAL_UART
 
     return 0;
 }
 
 int board_late_init()
 {
-#ifdef CONFIG_OXNAS_USE_SATA
-    /* Start U-Boot's IDE support */
-    ide_init();
-#endif // CONFIG_OXNAS_USE_SATA
-
     return 0;
 }
 
@@ -190,11 +180,42 @@ int misc_init_r(void)
 
 int dram_init(void)
 {
+#ifdef PROBE_MEM_SIZE
+	/* Determine the amount of SDRAM the DDR controller is configured for */
+	volatile unsigned long * const ddr_config_reg_adr = (volatile unsigned long *)(0x45800000);
+	static const int DDR_SIZE_BIT = 17;
+	static const int DDR_SIZE_NUM_BITS = 4;
+	static const unsigned long DDR_SIZE_MASK = (((1UL << DDR_SIZE_NUM_BITS) - 1) << DDR_SIZE_BIT);
+
+	unsigned long ddr_config_reg = *ddr_config_reg_adr;
+	int ddr_size_pow2 = (ddr_config_reg & DDR_SIZE_MASK) >> DDR_SIZE_BIT;
+
     DECLARE_GLOBAL_DATA_PTR;
 
-    gd->bd->bi_dram[0].start = PHYS_SDRAM_1_PA;
-    gd->bd->bi_dram[0].size  = PHYS_SDRAM_1_SIZE;
+    gd->bd->bi_dram[0].size  = (1 << ddr_size_pow2) * 1024 * 1024;
 
+	if ((gd->bd->bi_dram[0].size >> 20) == 256) {
+		/* Do we really have 256M, or are we working around the DDR controller's
+		 * problem with 128M size? */
+		volatile unsigned long * const PROBE_ADR_1 = (volatile unsigned long * const)PHYS_SDRAM_1_PA;
+		volatile unsigned long * const PROBE_ADR_2 = (volatile unsigned long * const)(PHYS_SDRAM_1_PA + (128*1024*1024));
+		static const unsigned long PROBE_VAL_1 = 0xdeadbeef;
+		static const unsigned long PROBE_VAL_2 = 0x12345678;
+
+		*PROBE_ADR_1 = PROBE_VAL_1;
+		*PROBE_ADR_2 = PROBE_VAL_2;
+		if (*PROBE_ADR_1 != PROBE_VAL_1) {
+			gd->bd->bi_dram[0].size  = 128*1024*1024;
+		}
+	}
+#else // PROBE_MEM_SIZE
+    gd->bd->bi_dram[0].size = MEM_SIZE;
+#endif // PROBE_MEM_SIZE
+
+    gd->bd->bi_dram[0].start = PHYS_SDRAM_1_PA;
+
+	gd->bd->bi_sramstart = CFG_SRAM_BASE;
+	gd->bd->bi_sramsize = CFG_SRAM_SIZE;
 
     return 0;
 }
@@ -213,6 +234,7 @@ int reset_cpu(void)
         (1UL << SYS_CTRL_RSTEN_DMA_BIT)      |
         (1UL << SYS_CTRL_RSTEN_DPE_BIT)      |
         (1UL << SYS_CTRL_RSTEN_SATA_BIT)     |
+        (1UL << SYS_CTRL_RSTEN_SATA_LINK_BIT) |
         (1UL << SYS_CTRL_RSTEN_SATA_PHY_BIT) |
         (1UL << SYS_CTRL_RSTEN_STATIC_BIT)   |
         (1UL << SYS_CTRL_RSTEN_UART1_BIT)    |
@@ -253,4 +275,6 @@ int reset_cpu(void)
     // is due to power cycling or programatic action, just hit the (self-
     // clearing) CPU reset bit of the block reset register
     *(volatile u32*)SYS_CTRL_RSTEN_SET_CTRL =  (1UL << SYS_CTRL_RSTEN_ARM_BIT);
+
+	return 0;
 }
