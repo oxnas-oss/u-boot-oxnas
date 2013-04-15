@@ -1,6 +1,5 @@
 #
-# (C) Copyright 2002
-# Gary Jennejohn, DENX Software Engineering, <gj@denx.de>
+# (C) Copyright 2008 Oxford Semiconductor Ltd
 #
 # See file CREDITS for list of people who contributed to this
 # project.
@@ -23,4 +22,4 @@
 
 PLATFORM_RELFLAGS += -fno-strict-aliasing  -fno-common -ffixed-r8
 
-PLATFORM_CPPFLAGS += -march=armv5te
+PLATFORM_CPPFLAGS += -march=armv6

@@ -201,25 +201,6 @@ static ulong lastdec;
 /* nothing really to do with interrupts, just starts up a counter. */
 int interrupt_init (void)
 {
-#ifdef CONFIG_OMAP
-	int32_t val;
-
-	/* Start the decrementer ticking down from 0xffffffff */
-	*((int32_t *) (CFG_TIMERBASE + LOAD_TIM)) = TIMER_LOAD_VAL;
-	val = MPUTIM_ST | MPUTIM_AR | MPUTIM_CLOCK_ENABLE | (CFG_PVT << MPUTIM_PTV_BIT);
-	*((int32_t *) (CFG_TIMERBASE + CNTL_TIMER)) = val;
-#endif	/* CONFIG_OMAP */
-#ifdef CONFIG_INTEGRATOR
-	/* Load timer with initial value */
-	*(volatile ulong *)(CFG_TIMERBASE + 0) = TIMER_LOAD_VAL;
-	/* Set timer to be enabled, free-running, no interrupts, 256 divider */
-	*(volatile ulong *)(CFG_TIMERBASE + 8) = 0x8C;
-#endif	/* CONFIG_INTEGRATOR */
-#ifdef CONFIG_VERSATILE
-	*(volatile ulong *)(CFG_TIMERBASE + 0) = CFG_TIMER_RELOAD;	/* TimerLoad */
-	*(volatile ulong *)(CFG_TIMERBASE + 4) = CFG_TIMER_RELOAD;	/* TimerValue */
-	*(volatile ulong *)(CFG_TIMERBASE + 8) = 0x8C;
-#endif	/* CONFIG_VERSATILE */
 #ifdef CONFIG_OXNAS
     // Setup timer 1 load value
     *(volatile ulong*)(CFG_TIMERBASE + 0) = TIMER_LOAD_VAL;

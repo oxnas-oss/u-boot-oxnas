@@ -1,6 +1,6 @@
 #
-# (C) Copyright 2002
-# Gary Jennejohn, DENX Software Engineering, <gj@denx.de>
+# (C) Copyright 2000-2003
+# Wolfgang Denk, DENX Software Engineering, wd@denx.de.
 #
 # See file CREDITS for list of people who contributed to this
 # project.
@@ -21,6 +21,23 @@
 # MA 02111-1307 USA
 #
 
-PLATFORM_RELFLAGS += -fno-strict-aliasing  -fno-common -ffixed-r8
+include $(TOPDIR)/config.mk
 
-PLATFORM_CPPFLAGS += -march=armv5te
+LIB	= lib$(CPU).a
+
+START	= start.o
+OBJS	= interrupts.o cpu.o
+
+all:	.depend $(START) $(LIB)
+
+$(LIB):	$(OBJS)
+	$(AR) crv $@ $(OBJS)
+
+#########################################################################
+
+.depend:	Makefile $(START:.o=.S) $(OBJS:.o=.c)
+		$(CC) -M $(CFLAGS) $(START:.o=.S) $(OBJS:.o=.c) > $@
+
+sinclude .depend
+
+#########################################################################
