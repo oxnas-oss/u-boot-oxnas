@@ -95,6 +95,13 @@ _fiq:
 _TEXT_BASE:
 	.word	TEXT_BASE
 
+#ifdef CONFIG_OXNAS
+/* Start of address within SRAM of loader's exception table. */
+_EXCEPTION_BASE:
+	.word	CONFIG_SYS_SRAM_BASE	/* ROM-based exception table will   */
+					/* redirect to here.                */
+#endif
+
 .globl _armboot_start
 _armboot_start:
 	.word _start
@@ -135,6 +142,23 @@ reset:
 	bic	r0,r0,#0x1f
 	orr	r0,r0,#0xd3
 	msr	cpsr,r0
+
+	/*
+	 * Copy U-Boot exception table of relocated address into the
+	 * internal SRAM. This copy loop have to be PIC and can run
+	 * either from Flash or from internal SRAM! The address
+	 * calculation of _start have to be relative!
+	 */
+#ifdef CONFIG_OXNAS
+	adr	r0, _start		/* r0 <- current position of code   */
+	ldr	r1, _EXCEPTION_BASE	/* r1 <- exception table in SRAM    */
+					/*  'reset' until '_prefetch_abort' */
+	ldmia	r0!, {r3-r10}		/* copy from source address [r0]    */
+	stmia	r1!, {r3-r10}		/* copy to   target address [r1]    */
+					/*  '_data_abort' until '_fiq'      */
+	ldmia	r0!, {r3-r10}		/* copy from source address [r0]    */
+	stmia	r1!, {r3-r10}		/* copy to   target address [r1]    */
+#endif
 
 	/*
 	 * we do sys-critical inits only at reboot,
