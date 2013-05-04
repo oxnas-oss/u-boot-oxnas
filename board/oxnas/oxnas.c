@@ -205,7 +205,12 @@ int dram_init(void)
 
 	gd->bd->bi_dram[0].start = PHYS_SDRAM_1_PA;
 
-    return 0;
+#if defined(CFG_SRAM_BASE) && defined(CFG_SRAM_SIZE)
+	gd->bd->bi_sramstart = CFG_SRAM_BASE;
+	gd->bd->bi_sramsize = CFG_SRAM_SIZE;
+#endif
+
+	return 0;
 }
 
 int reset_cpu(void)
