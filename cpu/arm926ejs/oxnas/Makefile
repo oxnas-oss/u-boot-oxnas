@@ -25,6 +25,7 @@ include $(TOPDIR)/config.mk
 
 LIB	= $(obj)lib$(SOC).a
 
+COBJS-$(CONFIG_DISPLAY_CPUINFO)	+= cpuinfo.o
 COBJS-y	+= board.o
 COBJS-y	+= clock.o
 COBJS-y	+= cpu.o
