@@ -29,6 +29,33 @@
 static void static_bus_init (void);
 static void internal_uart_init (void);
 
+char *strmhz (char *buf, long hz)
+{
+	long l, n;
+	long m;
+
+	n = hz / 1000000L;
+	l = sprintf (buf, "%ld", n);
+	m = (hz % 1000000L) / 1000L;
+	if (m != 0)
+		sprintf (buf + l, ".%03ld", m);
+	return (buf);
+}
+
+int checkboard (void)
+{
+	char  buf[32];
+
+        printf("OxSemi OXE%u (%s) at %s MHz%s\n", CONFIG_OXNAS_CHIP,
+			CONFIG_OXNAS_FPGA ? "FPGA" : "ASIC",
+			strmhz(buf, CONFIG_OXNAS_ARMCLK),
+			CONFIG_OXNAS_TEST_BRD ? ", test board" : "");
+	printf("Local Bus at %s MHz\n", strmhz(buf, CONFIG_OXNAS_SYSCLK));
+	printf("RPS Block at %s MHz\n", strmhz(buf, CFG_OXNAS_RPSCLK));
+
+        return 0;
+}
+
 int board_init(void)
 {
 	DECLARE_GLOBAL_DATA_PTR;
