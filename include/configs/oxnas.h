@@ -212,6 +212,7 @@
 #include <asm/arch/hardware.h>
 
 #define CFG_NS16550_CLK			(CONFIG_OXNAS_SYSCLK)
+#define CFG_NS16550_OXNAS_FRACTDIV	1
 
 #if (CONFIG_OXNAS_UART == 1)
 

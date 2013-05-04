@@ -150,8 +150,12 @@ static int calc_divisor (NS16550_t port)
 	 * but we need to round that value by adding 0.5.
 	 * Rounding is especially important at high baud rates.
 	 */
+#ifdef CFG_NS16550_OXNAS_FRACTDIV
+	return (((CFG_NS16550_CLK << 4) / gd->baudrate) + 8) >> 4;
+#else
 	return (CFG_NS16550_CLK + (gd->baudrate * (MODE_X_DIV / 2))) /
 		(MODE_X_DIV * gd->baudrate);
+#endif
 }
 
 #if !defined(CONFIG_SERIAL_MULTI)
