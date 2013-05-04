@@ -1,0 +1,43 @@
+/*
+ * Hardware definitions for OXE810
+ *
+ * (C) Copyright 2013
+ * Stephan Linz <linz@li-pro.net>
+ *
+ * See file CREDITS for list of people who contributed to this
+ * project.
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation; either version 2 of
+ * the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
+ * MA 02111-1307 USA
+ */
+
+#ifndef __ASM_ARCH_OXE810_H
+#define __ASM_ARCH_OXE810_H
+
+#include <asm/arch/ddrctrl.h>
+#include <asm/arch/gpio.h>
+#include <asm/arch/rps.h>
+#include <asm/arch/sysctrl.h>
+
+/*
+ * CPU name
+ */
+#if (CONFIG_OXNAS_FPGA == 1)
+#define OXNAS_CPU_NAME	"OXE810(D)SE (FPGA)"
+#else
+#define OXNAS_CPU_NAME	"OXE810(D)SE (ASIC)"
+#endif
+
+#endif /* __ASM_ARCH_OXE810_H */
