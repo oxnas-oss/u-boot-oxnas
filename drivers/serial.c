@@ -59,7 +59,13 @@ static int calc_divisor (void)
 		return (26);		/* return 26 for base divisor */
 	}
 #endif
-	return (CFG_NS16550_CLK / 16 / gd->baudrate);
+
+	/* round to nearest integer */
+#ifdef CFG_NS16550_OXNAS_FRACTDIV
+	return (((CFG_NS16550_CLK << 4) / gd->baudrate) + 8) >> 4;
+#else
+	return (((CFG_NS16550_CLK / gd->baudrate) + 8 ) / 16);
+#endif
 }
 
 int serial_init (void)
