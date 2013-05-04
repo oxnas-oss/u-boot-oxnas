@@ -32,6 +32,7 @@ COBJS-y	+= cpu.o
 COBJS-y	+= gpio.o
 COBJS-y	+= mem.o
 COBJS-y	+= muxconf.o
+COBJS-y	+= pci.o
 COBJS-y	+= reset.o
 COBJS-y	+= timer.o
 

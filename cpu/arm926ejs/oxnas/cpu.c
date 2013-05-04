@@ -32,6 +32,8 @@ int arch_cpu_init(void)
 	set_clk_rate(CONFIG_OXNAS_MAIN_CLK, CONFIG_OXNAS_PLL400_CLK);
 	per_resetclocks_enable();
 
+	pci_bus_init();
+
 	set_muxconf_regs();
 
 	return 0;

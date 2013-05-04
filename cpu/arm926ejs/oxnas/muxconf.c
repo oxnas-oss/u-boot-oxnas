@@ -32,6 +32,12 @@
 void set_muxconf_regs(void)
 {
 	/*
+	 * Enable PCI feedback clk out 3 onto GPIO pin (output). Set PCI
+	 * feedback clk GPIO pin as an output.
+	 */
+	gpio_set_fn(GPIO_FN_1ST_PCI_CKO3);
+
+	/*
 	 * Setup pin mux'ing for UART1 SOUT and SIN onto external pins.
 	 * Setup pin output enable for UART1 SOUT as output and SIN as input.
 	 */

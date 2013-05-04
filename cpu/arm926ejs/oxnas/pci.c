@@ -1,4 +1,7 @@
 /*
+ * (C) Copyright 2005
+ * Oxford Semiconductor Ltd
+ *
  * (C) Copyright 2013
  * Stephan Linz <linz@li-pro.net>
  *
@@ -12,7 +15,7 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
@@ -21,27 +24,21 @@
  * MA 02111-1307 USA
  */
 
-#ifndef __ASM_ARCH_SYS_PROTO_H
-#define __ASM_ARCH_SYS_PROTO_H
+#include <common.h>
 
 #include <asm/arch/hardware.h>
+#include <asm/arch/io.h>
 
-unsigned long get_cpu_clk_rate(void);
-unsigned long get_sys_clk_rate(void);
-unsigned long get_rps_clk_rate(void);
-void set_clk_rate(unsigned long main_clock, unsigned long pll_clock);
-void per_resetclocks_enable(void);
+void pci_bus_init (void)
+{
+	/* Assert manual arbitration request between Static Bus and PCI */
+	writel(readl(SYS_CTRL_PCI_CTRL1) | SYS_CTRL_CKEN_PCI,
+			SYS_CTRL_PCI_CTRL1);
 
-unsigned long probe_sdr_size(void);
+	/* Set 33MHz PCI clock */
+	writel(SYS_CTRL_CKCTRL_PCI_DIV(5), SYS_CTRL_CKCTRL_CTRL);
 
-void gpio_set_af(int gpio, int alternate_function);
-void gpio_set_dir(int gpio, int direction);
-void gpio_set_fn(int gpio_function);
-void gpio_set(int gpio, int val);
-int gpio_get(int gpio);
-
-void set_muxconf_regs(void);
-
-void pci_bus_init (void);
-
-#endif /* __ASM_ARCH_SYS_PROTO_H */
+	/* Enable full speed RPS clock */
+	writel(readl(SYS_CTRL_CKCTRL_CTRL) & ~SYS_CTRL_CKCTRL_SLOW,
+					SYS_CTRL_CKCTRL_CTRL);
+}

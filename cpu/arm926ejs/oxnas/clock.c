@@ -68,6 +68,13 @@ void per_resetclocks_enable(void)
 	/* Static Bus core clock enable */
 	writel(SYS_CTRL_CKEN_STATIC, SYS_CTRL_CKEN_SET_CTRL);
 
+	/* PCI block reset */
+	writel(SYS_CTRL_RSTEN_PCI, SYS_CTRL_RSTEN_SET_CTRL);
+	writel(SYS_CTRL_RSTEN_PCI, SYS_CTRL_RSTEN_CLR_CTRL);
+
+	/* PCI core clock enable */
+	writel(SYS_CTRL_CKEN_PCI, SYS_CTRL_CKEN_SET_CTRL);
+
 #ifdef CONFIG_OXNAS_UART1
 	/* UART1 block reset (assert/deassert) */
 	writel(SYS_CTRL_RSTEN_UART1, SYS_CTRL_RSTEN_SET_CTRL);
