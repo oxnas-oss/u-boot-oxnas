@@ -151,8 +151,12 @@ static int calc_divisor (NS16550_t port)
 	 * but we need to round that value by adding 0.5.
 	 * Rounding is especially important at high baud rates.
 	 */
+#if (CONFIG_OXNAS_UART > 0)
+	return (((CONFIG_SYS_NS16550_CLK << 4) / gd->baudrate) + 8) >> 4;
+#else
 	return (CONFIG_SYS_NS16550_CLK + (gd->baudrate * (MODE_X_DIV / 2))) /
 		(MODE_X_DIV * gd->baudrate);
+#endif
 }
 
 #if !defined(CONFIG_SERIAL_MULTI)

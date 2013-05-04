@@ -14,8 +14,30 @@
 		     UART_FCR_RXSR |	\
 		     UART_FCR_TXSR)		/* Clear & enable FIFOs */
 
+#if (CONFIG_OXNAS_UART > 0)
+static int oxnas_fractional_divider(NS16550_t com_port, int baud_divisor)
+{
+	/* Baud rate is passed around x16 */
+	int real_divisor = baud_divisor >> 4;
+
+	/*
+	 * Top three bits of 8-bit register 9 (DLF) hold the number
+	 * of eighths for the fractional part of the divide ratio.
+	 */
+	com_port->reg9 = (unsigned char)(
+			((baud_divisor - (real_divisor << 4)) << 4) & 0xFF);
+
+	/* Return the x1 divider for the normal divider register */
+	return real_divisor;
+}
+#endif
+
 void NS16550_init (NS16550_t com_port, int baud_divisor)
 {
+#if (CONFIG_OXNAS_UART > 0)
+	baud_divisor = oxnas_fractional_divider(com_port, baud_divisor);
+#endif
+
 	com_port->ier = 0x00;
 #if defined(CONFIG_OMAP) && !defined(CONFIG_OMAP3_ZOOM2)
 	com_port->mdr1 = 0x7;	/* mode select reset TL16C750*/
@@ -42,6 +64,10 @@ void NS16550_init (NS16550_t com_port, int baud_divisor)
 #ifndef CONFIG_NS16550_MIN_FUNCTIONS
 void NS16550_reinit (NS16550_t com_port, int baud_divisor)
 {
+#if (CONFIG_OXNAS_UART > 0)
+	baud_divisor = oxnas_fractional_divider(com_port, baud_divisor);
+#endif
+
 	com_port->ier = 0x00;
 	com_port->lcr = UART_LCR_BKSE | UART_LCRVAL;
 	com_port->dll = 0;
