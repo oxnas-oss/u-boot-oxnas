@@ -16,6 +16,12 @@
  * (C) Copyright 2004
  * Philippe Robin, ARM Ltd. <philippe.robin@arm.com>
  *
+ * (C) Copyright 2005
+ * Oxford Semiconductor Ltd. <www.oxsemi.com>
+ *
+ * (C) Copyright 2013
+ * Stephan Linz <linz@li-pro.net>
+ *
  * See file CREDITS for list of people who contributed to this
  * project.
  *
@@ -41,7 +47,13 @@
 #include <asm/proc-armv/ptrace.h>
 
 extern void reset_cpu(ulong addr);
-#define TIMER_LOAD_VAL 0xffffffff
+
+#ifdef CONFIG_OXNAS
+/* RPS timer value register has only 16 defined bits */
+#define TIMER_LOAD_VAL	TIMER_VALUE_MASK
+#else
+#define TIMER_LOAD_VAL	0xffffffff
+#endif
 
 /* macro to read the 32 bit timer */
 #ifdef CONFIG_OMAP
@@ -52,6 +64,11 @@ extern void reset_cpu(ulong addr);
 #endif
 #ifdef CONFIG_VERSATILE
 #define READ_TIMER (*(volatile ulong *)(CFG_TIMERBASE+4))
+#endif
+
+/* macro to read the 16 bit timer */
+#ifdef CONFIG_OXNAS
+#define READ_TIMER ((*(volatile ushort *)(CFG_TIMERBASE+4)) & TIMER_VALUE_MASK)
 #endif
 
 #ifdef CONFIG_USE_IRQ
@@ -212,6 +229,15 @@ int interrupt_init (void)
 	*(volatile ulong *)(CFG_TIMERBASE + 4) = CFG_TIMER_RELOAD;	/* TimerValue */
 	*(volatile ulong *)(CFG_TIMERBASE + 8) = 0x8C;
 #endif	/* CONFIG_VERSATILE */
+#ifdef CONFIG_OXNAS
+	/* Load timer with initial value */
+	*(volatile ulong*)(CFG_TIMERBASE + 0) = TIMER_LOAD_VAL;
+	/* Set timer to be enabled, periodic run, no interrupts, 256 divider */
+	*(volatile ulong*)(CFG_TIMERBASE + 8) =	(
+			TIMER_CTRL_ENABLE		|
+			TIMER_CTRL_MODE_PERIODIC	|
+			TIMER_CTRL_PRESCALE(TPS_256));
+#endif	/* CONFIG_OXNAS */
 
 	/* init the timestamp and lastdec value */
 	reset_timer_masked();
