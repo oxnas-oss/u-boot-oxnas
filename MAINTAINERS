@@ -665,6 +665,10 @@ Dave Peverley <dpeverley@mpc-data.co.uk>
 
 	omap730p2	ARM926EJS
 
+Stephan Linz <linz@li-pro.net>
+
+	oxnas		ARM926EJS
+
 Manikandan Pillai <mani.pillai@ti.com>
 
 	omap3_evm	ARM CORTEX-A8 (OMAP3xx SoC)
