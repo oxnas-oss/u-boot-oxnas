@@ -155,11 +155,13 @@ static int display_dram_config (void)
 	return (0);
 }
 
+#if !defined(CFG_NO_FLASH)
 static void display_flash_config (ulong size)
 {
 	puts ("Flash: ");
 	print_size (size, "\n");
 }
+#endif
 
 
 /*
@@ -208,7 +210,9 @@ void start_armboot (void)
 {
 	DECLARE_GLOBAL_DATA_PTR;
 
+#if !defined(CFG_NO_FLASH) || defined(CONFIG_VFD) || defined(CONFIG_LCD)
 	ulong size;
+#endif
 	init_fnc_t **init_fnc_ptr;
 	char *s;
 #if defined(CONFIG_VFD) || defined(CONFIG_LCD)
@@ -233,8 +237,10 @@ void start_armboot (void)
 	}
 
 	/* configure available FLASH banks */
+#ifndef CFG_NO_FLASH
 	size = flash_init ();
 	display_flash_config (size);
+#endif
 
 #ifdef CONFIG_VFD
 #	ifndef PAGE_SIZE
