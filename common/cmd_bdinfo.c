@@ -228,6 +228,11 @@ int do_bdinfo ( cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 		print_num("-> size",	bd->bi_dram[i].size);
 	}
 
+#if defined(CFG_SRAM_BASE) && defined(CFG_SRAM_SIZE)
+	print_num ("sram start",	(ulong)bd->bi_sramstart);
+	print_num ("sram size",		(ulong)bd->bi_sramsize);
+#endif
+
 	puts ("ethaddr     =");
 	for (i=0; i<6; ++i) {
 		printf ("%c%02X", i ? ':' : ' ', bd->bi_enetaddr[i]);

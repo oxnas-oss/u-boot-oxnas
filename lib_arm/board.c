@@ -152,6 +152,11 @@ static int display_dram_config (void)
 		print_size (gd->bd->bi_dram[i].size, "\n");
 	}
 
+#if defined(CFG_SRAM_BASE) && defined(CFG_SRAM_SIZE)
+	printf("SRAM:    %08lx ", gd->bd->bi_sramstart);
+	print_size (gd->bd->bi_sramsize, "\n");
+#endif
+
 	return (0);
 }
 
