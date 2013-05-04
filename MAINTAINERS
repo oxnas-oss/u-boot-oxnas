@@ -541,6 +541,10 @@ Dave Peverley <dpeverley@mpc-data.co.uk>
 
 	omap730p2	ARM926EJS
 
+Stephan Linz <linz@li-pro.net>
+
+	oxnas		ARM926EJS
+
 Stelian Pop <stelian.pop@leadtechdesign.com>
 
 	at91cap9adk	ARM926EJS (AT91CAP9 SoC)

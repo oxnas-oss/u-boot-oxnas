@@ -2482,6 +2482,36 @@ omap730p2_cs3boot_config :	unconfig
 	fi;
 	@$(MKCONFIG) -a $(call xtract_omap730p2,$@) arm arm926ejs omap730p2 NULL omap
 
+xtract_oxnas = $(subst _800_testbrd,,$(subst _810_fpga,,$(subst _810_dse,,$(subst _config,,$1))))
+
+oxnas_800_testbrd_config \
+oxnas_810_fpga_config \
+oxnas_810_dse_config \
+oxnas_config :	unconfig
+	@ >include/config.h
+	@[ -z "$(findstring _800_testbrd,$@)" ] || \
+		{ echo "#define CONFIG_OXNAS_CHIP 800"   >>include/config.h ; \
+		  echo "#define CONFIG_OXNAS_TEST_BRD 1" >>include/config.h ; \
+		  echo "#define CONFIG_OXNAS_FPGA 0"     >>include/config.h ; \
+		  echo "#define CONFIG_OXNAS_UART 2"     >>include/config.h ; \
+		  echo "... for OXE800 test board, with internal UART2" ; \
+		}
+	@[ -z "$(findstring _810_fpga,$@)" ] || \
+		{ echo "#define CONFIG_OXNAS_CHIP 810"   >>include/config.h ; \
+		  echo "#define CONFIG_OXNAS_TEST_BRD 0" >>include/config.h ; \
+		  echo "#define CONFIG_OXNAS_FPGA 1"     >>include/config.h ; \
+		  echo "#define CONFIG_OXNAS_UART 2"     >>include/config.h ; \
+		  echo "... for OXE810 FPGA, with internal UART2" ; \
+		}
+	@[ -z "$(findstring _810_dse,$@)" ] || \
+		{ echo "#define CONFIG_OXNAS_CHIP 810"   >>include/config.h ; \
+		  echo "#define CONFIG_OXNAS_TEST_BRD 0" >>include/config.h ; \
+		  echo "#define CONFIG_OXNAS_FPGA 0"     >>include/config.h ; \
+		  echo "#define CONFIG_OXNAS_UART 2"     >>include/config.h ; \
+		  echo "... for OXE810DSE ASIC, with internal UART2" ; \
+		}
+	@$(MKCONFIG) -a $(call xtract_oxnas,$@) arm arm926ejs oxnas NULL oxnas
+
 sbc2410x_config: unconfig
 	@$(MKCONFIG) $(@:_config=) arm arm920t sbc2410x NULL s3c24x0
 
