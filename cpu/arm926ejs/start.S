@@ -10,6 +10,8 @@
  *  Copyright (c) 2002	Gary Jennejohn <gj@denx.de>
  *  Copyright (c) 2003	Richard Woodruff <r-woodruff2@ti.com>
  *  Copyright (c) 2003	Kshitij <kshitij@ti.com>
+ *  Copyright (c) 2005	Oxford Semiconductor Ltd.
+ *  Copyright (c) 2013	Stephan Linz <linz@li-pro.net>
  *
  * See file CREDITS for list of people who contributed to this
  * project.
@@ -391,6 +393,7 @@ fiq:
 
 #endif
 
+#ifndef CONFIG_OXNAS
 	.align	5
 .globl reset_cpu
 reset_cpu:
@@ -405,3 +408,4 @@ _loop_forever:
 
 rstctl1:
 	.word	0xfffece10
+#endif

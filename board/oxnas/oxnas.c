@@ -207,3 +207,38 @@ int dram_init(void)
 
     return 0;
 }
+
+int reset_cpu(void)
+{
+	printf("Resetting Oxsemi NAS...");
+
+	/* Assert reset to cores as per power on defaults */
+	writel(SYS_CTRL_RSTEN_PONDEFAULT, SYS_CTRL_RSTEN_SET_CTRL);
+
+	/* Release reset to cores as per power on defaults */
+	writel(SYS_CTRL_RSTEN_GPIO, SYS_CTRL_RSTEN_CLR_CTRL);
+
+	/* Disable clocks to cores as per power-on defaults */
+	writel(SYS_CTRL_CKEN_PONDEFAULT, SYS_CTRL_CKEN_CLR_CTRL);
+
+	/* Enable clocks to cores as per power-on defaults */
+	writel(SYS_CTRL_CKEN_PCI, SYS_CTRL_CKEN_SET_CTRL);
+
+	/* Set sys-control pin mux'ing as per power-on defaults */
+	writel(GPIOFMUX_1ST_PCI_CKO3, SYS_CTRL_GPIO_PRIMSEL_CTRL_0);
+	writel(0x0UL, SYS_CTRL_GPIO_PRIMSEL_CTRL_1);
+	writel(0x0UL, SYS_CTRL_GPIO_SECSEL_CTRL_0);
+	writel(0x0UL, SYS_CTRL_GPIO_SECSEL_CTRL_1);
+	writel(0x0UL, SYS_CTRL_GPIO_TERTSEL_CTRL_0);
+	writel(0x0UL, SYS_CTRL_GPIO_TERTSEL_CTRL_1);
+
+	/*
+	 * No need to save any state, as the ROM loader can determine
+	 * whether reset is due to power cycling or programatic action,
+	 * just hit the (self-clearing) CPU reset bit of the block
+	 * reset register
+	 */
+	writel(SYS_CTRL_RSTEN_ARM, SYS_CTRL_RSTEN_SET_CTRL);
+
+	return 0;
+}
