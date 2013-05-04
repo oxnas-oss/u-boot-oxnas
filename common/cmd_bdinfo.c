@@ -333,6 +333,11 @@ int do_bdinfo ( cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 		print_num("-> size",	bd->bi_dram[i].size);
 	}
 
+#if defined(CONFIG_SYS_SRAM_BASE) && defined(CONFIG_SYS_SRAM_SIZE)
+	print_num ("sram start",	(ulong)bd->bi_sramstart);
+	print_num ("sram size",		(ulong)bd->bi_sramsize);
+#endif
+
 #if defined(CONFIG_CMD_NET)
 	print_eth(0);
 	printf ("ip_addr     = %pI4\n", &bd->bi_ip_addr);
