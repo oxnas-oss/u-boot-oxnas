@@ -26,6 +26,7 @@ include $(TOPDIR)/config.mk
 LIB	= $(obj)lib$(SOC).a
 
 COBJS-y	+= clock.o
+COBJS-y	+= cpu.o
 COBJS-y	+= gpio.o
 COBJS-y	+= mem.o
 COBJS-y	+= muxconf.o
