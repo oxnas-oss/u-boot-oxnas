@@ -202,6 +202,12 @@ static int display_dram_config (void)
 		printf ("Bank #%d: %08lx ", i, gd->bd->bi_dram[i].start);
 		print_size (gd->bd->bi_dram[i].size, "\n");
 	}
+
+#if defined(CFG_SRAM_BASE) && defined(CFG_SRAM_SIZE)
+	printf("SRAM:    %08lx ", gd->bd->bi_sramstart);
+	print_size (gd->bd->bi_sramsize, "\n");
+#endif
+
 #else
 	ulong size = 0;
 
@@ -210,6 +216,11 @@ static int display_dram_config (void)
 	}
 	puts("DRAM:  ");
 	print_size(size, "\n");
+#endif
+
+#if defined(CFG_SRAM_BASE) && defined(CFG_SRAM_SIZE)
+	puts("SRAM:  ");
+	print_size (gd->bd->bi_sramsize, "\n");
 #endif
 
 	return (0);

@@ -48,6 +48,10 @@ typedef struct bd_info {
 	ulong start;
 	ulong size;
     }			bi_dram[CONFIG_NR_DRAM_BANKS];
+#if defined(CFG_SRAM_BASE) && defined(CFG_SRAM_SIZE)
+    unsigned long	bi_sramstart;	/* start of SRAM memory */
+    unsigned long	bi_sramsize;	/* size	 of SRAM memory */
+#endif
 #ifdef CONFIG_HAS_ETH1
     /* second onboard ethernet port */
     unsigned char   bi_enet1addr[6];
