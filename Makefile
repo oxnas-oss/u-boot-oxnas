@@ -1230,6 +1230,8 @@ xtract_omap1610xxx = $(subst _cs0boot,,$(subst _cs3boot,,$(subst _cs_autoboot,,$
 
 xtract_omap730p2 = $(subst _cs0boot,,$(subst _cs3boot,, $(subst _config,,$1)))
 
+xtract_oxnas = $(subst _800_testbrd,,$(subst _810_fpga,,$(subst _810_dse,,$(subst _config,,$1))))
+
 integratorap_config :	unconfig
 	@./mkconfig $(@:_config=) arm arm926ejs integratorap
 
@@ -1283,6 +1285,35 @@ omap730p2_cs3boot_config :	unconfig
 		echo "... configured for CS3 boot"; \
 	fi;
 	@./mkconfig -a $(call xtract_omap730p2,$@) arm arm926ejs omap730p2
+
+# temporary:
+oxnas_800_testbrd_config \
+oxnas_810_fpga_config \
+oxnas_810_dse_config \
+oxnas_config :	unconfig
+	@ >include/config.h
+	@[ -z "$(findstring _800_testbrd,$@)" ] || \
+		{ echo "#define CONFIG_OXNAS_CHIP 800"   >>include/config.h ; \
+		  echo "#define CONFIG_OXNAS_TEST_BRD 1" >>include/config.h ; \
+		  echo "#define CONFIG_OXNAS_FPGA 0"     >>include/config.h ; \
+		  echo "#define CONFIG_OXNAS_UART 2"     >>include/config.h ; \
+		  echo "... for OXE800 test board, with internal UART2" ; \
+		}
+	@[ -z "$(findstring _810_fpga,$@)" ] || \
+		{ echo "#define CONFIG_OXNAS_CHIP 810"   >>include/config.h ; \
+		  echo "#define CONFIG_OXNAS_TEST_BRD 0" >>include/config.h ; \
+		  echo "#define CONFIG_OXNAS_FPGA 1"     >>include/config.h ; \
+		  echo "#define CONFIG_OXNAS_UART 2"     >>include/config.h ; \
+		  echo "... for OXE810 FPGA, with internal UART2" ; \
+		}
+	@[ -z "$(findstring _810_dse,$@)" ] || \
+		{ echo "#define CONFIG_OXNAS_CHIP 810"   >>include/config.h ; \
+		  echo "#define CONFIG_OXNAS_TEST_BRD 0" >>include/config.h ; \
+		  echo "#define CONFIG_OXNAS_FPGA 0"     >>include/config.h ; \
+		  echo "#define CONFIG_OXNAS_UART 2"     >>include/config.h ; \
+		  echo "... for OXE810DSE ASIC, with internal UART2" ; \
+		}
+	@./mkconfig -a $(call xtract_oxnas,$@) arm arm926ejs oxnas
 
 scb9328_config	:	unconfig
 	@./mkconfig $(@:_config=) arm arm920t scb9328 NULL imx

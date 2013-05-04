@@ -1,0 +1,529 @@
+U-Boot for OXNAS
+
+Last Update: April 25, 2013
+==============================================================================
+
+This file contains information regarding U-Boot and the Oxford Semiconductor
+OXNAS CPU. For information regarding U-Boot and the OXNAS CPU see:
+
+  * http://www.li-pro.de/embedded/oxnas/uboot/start (German only)
+
+For those interested in contributing ... see HELP WANTED below.
+
+
+1. OVERVIEW
+------------
+
+OxSemi OXE810(D)SE NAS devices (aka OXNAS) are Network Attached Storage
+devices based on OxSemi OXE810 processor. OXE800(D)SE was the predecessor
+of OXE810. Both processors were developed by Oxford Semiconductor Ltd. later
+taken by PLX Technology, Inc.
+
+There are many consumer products based on the OXNAS CPU OXE800 / OXE810:
+
+  * Conceptronic (2L Alliance B.V.): CH3HNAS (V1)
+  * Iomega Corp.: Home Media Network Hard Drive
+  * LogiLink (2direct GmbH): NS0045 and NS0046
+  * Sitecom Europe B.V.: MD-253
+  * Thecus Technology Corp.: N0204 and N2200
+  * Western Digital Corp.: My Book World Edition (II) (blue/white rings)
+  * ZyXEL Communications Corp.: NSA-210 and NSA-221
+  * Xtreamer Ltd. or TrekStor: eTRAYz
+
+A detailed overview can be found at:
+
+  * http://www.li-pro.de/embedded/oxnas/devices/start (German only)
+
+1.1 OXNAS CPU OXE800(D)SE
+-------------------------
+  * ARM926EJ-S at 200 MHz
+  * DDR memory controller (up to 64 MB)
+  * DMA controller
+  * PCI host controller
+  * SATA II Interface, one or two (D-type)
+  * 10/100 Ethernet Controller
+  * USB 1.1 and 2.0 on-chip host controller
+  * four on-chip UART (NS16550 compatible with fractional divider)
+  * AES Encryption and decryption in hardware
+  * on-chip fan controller
+
+1.2 OXNAS CPU OXE810(D)SE
+-------------------------
+  * ARM926EJ-S at 367 MHz
+  * DDR/DDR2 memory controller (up to 256 MB)
+  * DMA controller (high-speed)
+  * PCI host controller
+  * SATA II Interface, one or two (D-type)
+  * 10/100/1000 Ethernet Controller with TSO
+  * USB 1.1 and 2.0 on-chip host controller
+  * four on-chip UART (NS16550 compatible with fractional divider)
+  * AES Encryption and decryption in hardware
+  * on-chip fan controller
+
+1.3 OxSemi Source Code
+----------------------
+Unfortunately OxSemi/PLXTech has no intention to update there software to
+current U-Boot versions or contribute sources to mainline. The latest
+version officially supported by Oxford Semiconductor is U-Boot 1.1.2 and
+can extracted from their SDK 1.2.3-1117 RC1 (14th Nov 2008):
+
+  * http://download.conceptronic.net/GPL/C05-328_CH3HNAS_GPL_Source_Code_SDK.zip
+
+OXNAS is no longer supported by OxSemi/PLXTech. This port was created as
+an community port based on the latest U-Boot 1.1.2 by OxSemi. U-Boot has
+been successfully tested on the Iomega Home Media Network Hard Drive using
+without any flash configuration.
+
+1.4 On-chip bootrom
+-------------------
+If on-chip bootrom is just not enough, then U-Boot is a great antibiotic.
+You will be very pleased with its high degree of configurability and its
+rich feature set. That's why U-Boot is the default second stage bootloader
+on OXNAS CPU.
+
+1.5 Debugging via JTAG
+----------------------
+The OXNAS port debugging with gdb via the JTAG port is completely untested,
+but should be possible (it is a ARMv5 CPU)!
+
+
+2. CONFIGURATION OPTIONS/SETTINGS
+---------------------------------
+
+2.1 OXNAS-specific Options/Settings
+-----------------------------------
+All configuration options/settings that are specific to OXNAS begin with
+"CONFIG_OXNAS_", or "CFG_OXNAS_". The following is a list of currently
+defined OXNAS-specific options/parameters used inside of U-Boot.
+
+CONFIG_OXNAS -- [essential] defined for all OXNAS boards.
+
+CONFIG_OXNAS_CHIP -- [essential] defines the chip number.
+	Possible values are:
+		800 ==> OXE800(D)SE
+		810 ==> OXE810(D)SE
+	There is no default value. You have to define the right number.
+
+CONFIG_OXNAS_FPGA -- [optional] defined for all implementations of an
+	OXE810 in an FPGA instead of the final production ASIC. This means
+	that you have an experimental setup without DDR2 SDRAM controller
+	and an reduced SATA performance (1.5GB instead of 3.0GB).
+	This configuration option is only significant for OXE810. Leave
+	undefined to disable this feature.
+
+CONFIG_OXNAS_TEST_BRD -- [optional] defined for the OXE800 test board.
+	The OXE800 test board will need some extra platform setup. This
+	configuration option is only significant for OXE800. Leave undefined
+	to disable this feature.
+
+CONFIG_OXNAS_INIT_SDRAM -- [essential] defined to re-initialise SDRAM
+	controller in platformsetup() when execute in ROM/SRAM. It checks
+	that U-Boot is not executed in SDRAM, because of suicide if
+	re-initialise DRAM.
+
+CONFIG_OXNAS_PROBE_MSIZE -- [optional] defined for OXE810 boards to probe
+	the real existing SDRAM from 265 MB down to 64 MB. This
+	configuration option is only significant for OXE810. Leave undefined
+	to disable this feature. Then you have to define the configuration
+	CONFIG_OXNAS_PROBE_MSIZE and set the exact SDRAM memory size.
+
+CONFIG_OXNAS_MSIZE -- [optional/essential] defined the exact SDRAM memory
+	size for OXE800 boards and depending on CONFIG_OXNAS_PROBE_MSIZE for
+	OXE810 boards too. Leave undefined to set default value 64.
+
+CONFIG_OXNAS_MODT -- [essential] defines the on-chip termination (ODT) in
+	the delay-locked loop (DLL) in the SDRAM controller. Possible values
+	are:
+		 50 ==>  50 Ohm
+		 75 ==>  75 Ohm
+		100 ==> 100 Ohm
+	This configuration option is only significant for OXE810. Leave
+	undefined to set default value 150 (Ohm).
+
+CONFIG_OXNAS_UART -- [essential] defined for all OXNAS boards. It defines
+	the number of the internal or external UART as console. Possible
+	values are:
+		   0 ==> use external UART, must be defined in details,
+			 default is NS16550 compatible with 16 MHz clock and
+			 at base address 0x28000000
+		   1 ==> 1 for UART1
+		   2 ==> 2 for UART2
+		   3 ==> 3 for UART3
+		>= 4 ==> 4 for UART4
+	The default value is: 2
+
+CONFIG_OXNAS_UART1 -- [automatic] defined if CONFIG_OXNAS_UART is 1
+
+CONFIG_OXNAS_UART2 -- [automatic] defined if CONFIG_OXNAS_UART is 2
+
+CONFIG_OXNAS_UART3 -- [automatic] defined if CONFIG_OXNAS_UART is 3
+
+CONFIG_OXNAS_UART4 -- [automatic] defined if CONFIG_OXNAS_UART is >= 4
+
+
+3. BOOT PROCESS
+---------------
+
+3.1 Boot process over on-chip bootrom
+-------------------------------------
+When the OXNAS CPU catch a reset signal it will begin to be running code
+from the default ARM reset vector that points into the internal on-chip
+bootrom. The ARM processor should be selected to start operating from
+address 0 to do so. This is selected by a pin on the processor itself.
+
+The bootrom will obtain (or execute) a program from a variety of sources.
+The source is selected by the GPIO inputs. The sources are:
+
+  - SERIAL port
+  - FLASH memory on the STATIC BUS (either 8 or 16 bit data bus, single
+    or duplicated images).
+  - SATA0 sector 0, the master boot record (MBR)
+
+The SERIAL boot mode is completely unknown.
+
+The FLASH memory images are executed in place.
+
+The SATA0 MBR will not directly executed as known from other systems that
+boot by standard hard disk MBR (there is no code inside). Rather, the OXNAS
+MBR presents a redundant boot parameterblock that points to that place on
+hard disk from where the next stage boot code have to copied into internal
+SRAM. As recently as then the code in SRAM are executed in place. This 2nd
+stage boot code is embedded in the OXNAS boot package (see below).
+
+3.2 Structure of the OXNAS SATA0 MBR
+------------------------------------
+The OXNAS MBR includes a primary and a secondary boot parameter block at
+offset 0x1b0 and 0x1a4, the disk signature at 0x1bc (always zero), the
+standard partition table with four partition entries from offset 0x1be
+up to 0x1fd, and the boot signature at 0x1fe (alway 0x55aa).
+
+.--------------.--------------------------------------.---------.
+|   Address    |                                      | Size in |
+|  Hex  |  Dec | Description                          |   byte  |
++-------+------+--------------------------------------+---------+
+| +000h |  +0  | (always set to zero)                 |   420   |
++-------+------+--------------------+-----------------+---------+
+| +1A4h | +420 | Secondary          | OXNAS boot      |    12   |
+| +1B0h | +432 | Primary            | parameter block |    12   |
++-------+------+--------------------+-----------------+---------+
+| +1BCh | +444 | 0000h              | Disk signature  |     2   |
++-------+------+--------------------+-----------------+---------+
+| +1BEh | +446 | Partition entry #1 |                 |    16   |
+| +1CEh | +462 | Partition entry #2 | Partition table |    16   |
+| +1DEh | +478 | Partition entry #3 |                 |    16   |
+| +1EEh | +494 | Partition entry #4 |                 |    16   |
++-------+------+--------------------+-----------------+---------+
+| +1FEh | +510 | 55h                | Boot signature  |     2   |
+| +1FFh | +511 | AAh                |                 |         |
+'-------'------'--------------------'-----------------'---------'
+
+To generate/setup a OXNAS master boot record you can use the command line
+script 'setupoxnasmbr' from the oxnas-tools package (see below, TOOLS AND
+LINKS).
+
+3.3 Structure of the OXNAS boot parameter block
+-----------------------------------------------
+A single OXNAS boot parameter block, the primary or the secondary, consists
+of the sector number to start copying, the number of bytes to copy, and a
+preceding checksum (start + length) to protect the content. The length have
+to be lower than or equal to 128 kB, because there is no more SRAM available.
+
+.--------------.------------------------------------.---------.--------.
+|   Address    |                                    | Size in |        |
+|  Hex  |  Dec | Description                        |   byte  | Examp. |
++-------+------+------------------------------------+---------+--------+
+| +000h |  +0  | Checksum (imple: tart + length)    |    4    | 20570h |
+| +004h |  +4  | Sector number to start             |    4    |  2970h |
+| +008h |  +8  | Number of bytes to copy (=< 128kB) |    4    | 1DC00h |
+'-------'------'------------------------------------'---------'--------'
+
+3.4 Structure of the OXNAS boot package
+---------------------------------------
+The 2nd stage boot code is embedded in the OXNAS boot package, but the
+package itself remains executable code. This works because the first 32 bit
+value is an relative jump across the package header into the 2nd stage boot
+code (add pc, pc, #<offset>). The boot package header presents information
+that the on-chip bootrom will need to check and verify the 2nd stage boot
+code.
+
+.-------------.--------------------------.-------.-----------------------------.
+|   Address   |                          | Size  |                             |
+|  Hex  | Dec | Description              |  byte |  Example                    |
++-------+-----+--------------------------+-------+-----------+-----------------+
+| +000h |  +0 | Relative jump to NOP     |     4 | E28FF038h | add pc, pc, #56 |
+| +004h |  +4 | Gap (always set to zero) |    44 | 0000..00h | .org 0x30       |
+| +030h | +48 | Image length             |     4 | 000172C8h | .word 94920     |
+| +034h | +52 | Image CRC-32             |     4 | 1CA7AF7Ah | .word 0x1ca7af7a|
+| +038h | +56 | Header CRC-32 (0..037h)  |     4 | 70DC707Ch | .word 0x70dc707c|
+| +03Ch | +60 | NOP mnemonic             |     4 | E1A00000h | nop             |
++-------+-----+--------------------------+-------+-----------+-----------------+
+| +040h | +64 | Image content, 2nd stage | 94920 | ea000013 e59ff014 ...       |
+'-------'-----'--------------------------'-------'-----------'-----------------'
+
+The polynomial used for CRC-32 corresponds to HDLC and Ethernet, 04C11DB7h:
+
+	 32   26   23   22   16   12   11   10   8    7    5    4    2
+P(x) =	x  + x  + x  + x  + x  + x  + x  + x  + x  + x  + x  + x  + x  + x  + 1
+
+To convert a U-Boot binary file into a OXNAS boot package you can use the
+command line script 'mkoxnasblob' from the oxnas-tools package (see below,
+TOOLS AND LINKS).
+
+
+4. DEVELOPMENT PROCESS
+----------------------
+The porting to latest mainline code as well as ongoing development is
+conducted on the Iomega Home Media Network Hard Drive (IOHMNHD). This
+device comes with a single SATA port (no raid) and without Flash memory.
+So it is a really poor device, but good enogth for basic boot code
+development.
+
+In this section I will describe a basic device setup for U-Boot
+development. You getting more informations in details by using Google.
+A good start point is the "NAS-Central Wiki": http://www.nas-central.org/
+
+4.1 Serial port access
+----------------------
+First of all you will need a old and depreciated IOHMNHD, because all the
+preperations and manipulations will destroy the content of the built-in
+hard-disk and influence the normal boot process. Further you have to open
+the case for serial port access and this   VOIDS   __YOUR__   WARRENTY !!!
+
+The serial port is located on a not assembled connector. Open the device
+and connect a 3.3V TTL to RS232 level converter as describe in this two
+Iomega NAS-Central Wiki pages:
+
+	http://iomega.nas-central.org/wiki/Home_Media_Disassembly
+	http://iomega.nas-central.org/wiki/Serial_port_(Home_Media)
+
+4.2 Hard disk setup
+-------------------
+To understand the steps in this section you should read this Iomega
+NAS-Central Wiki page:
+
+	http://iomega.nas-central.org/wiki/Installing_firmware_on_a_new_disk_(Home_Media)
+
+For U-Boot development you will need a working boot process, but not the
+complete Linux runtime environment. So it is sufficient enough to copy the
+binary artefact with MBR and U-Boot onto hard disk and remove all unnecessery
+partition entries (replace /dev/sd<X> with real device name):
+
+	$ wget http://downloads.iomega.nas-central.org/Users/Mijzelf/HMNHD/partitions.2.064/mbr+uboot+kernel.gz
+	$ gzip -dc mbr+uboot+kernel.gz | sudo dd of=/dev/sd<X>
+	$ echo "0,0,0," | sudo sfdisk --force -N2 /dev/sd<X>
+	$ echo "0,0,0," | sudo sfdisk --force -N1 /dev/sd<X>
+	$ sync
+
+When you put this disk in your IOHMNHD, it should boot into the stock
+U-Boot (Bootlog on serial port 115200-N-8-1):
+
+	Initialising disks
+	No FIS received from device 1
+	No FIS received from device 1
+	Detecting SATA busses:
+	Bus 0: Found first device OK
+	  Device 0: Model: TS2GSDOM22V  Firm: 20110407 Ser#: HONKOMAT
+		    Type: Hard Disk
+		    Capacity: 1919.5 MB = 1.8 GB (3931200 x 512)
+	  Device 1: not available
+	Environment successfully read from disk 0 primary image
+
+
+	U-Boot 1.1.2 (Dec 10 2008 - 07:58:49)
+
+	U-Boot code: 48D00000 -> 48D18B98  BSS: -> 48D1C828
+	RAM Configuration:
+		Bank #0: 48000000 64 MB
+	SRAM Configuration:
+		128KB at 0x58000000
+	In:    serial
+	Out:   serial
+	Err:   serial
+
+	IDE read: device 0 block # 288, count 1 ... 1 blocks read: OK
+	Hit any key to stop autoboot:  0 
+	$ _
+
+4.3 Start your own U-Boot
+-------------------------
+See below, TOOLS AND LINKS, to compile your own U-Boot from source. Store
+the binary file 'u-boot.bin' to that place from where your IOHMNHD can
+download by TFTP. Then type in on stock U-Boot command line (replace the
+IPv4 values with your private local network setup):
+
+	$ setenv ipaddr 10.0.0.10
+	$ setenv netmask 255.0.0.0
+	$ setenv gatewayip 10.0.0.1
+	$ setenv serverip 10.0.0.1
+
+	$ tftpboot 0x58000000 /oxnas/u-boot.bin
+	Wait GMAC to reset
+	Wait for PHY reset
+	Wait for link to come up.......Link up
+	Wait for auto-negotiation to complete
+	Link is 10M/100M
+	TFTP from server 10.0.0.1; our IP address is 10.0.0.10
+	Filename '/oxnas/u-boot.bin'.
+	Load address: 0x58000000
+	Loading: ############
+	done
+	Bytes transferred = 58944 (e640 hex)
+
+	$ go 0x58000000
+	## Starting application at 0x58000000 ...
+
+This sequence has setup the IPv4 configuration, download your own U-Boot
+into the on-chip SRAM and start from there (Bootlog example):
+
+	U-Boot 1.1.2 (Apr 24 2013 - 19:30:35)
+
+	U-Boot code: 48D00000 -> 48D0E640  BSS: -> 48D0FB08
+	RAM Configuration:
+	Bank #0: 48000000 64 MB
+	SRAM: 58000000 128 KB
+	Using default environment
+
+	In:    serial
+	Out:   serial
+	Err:   serial
+	$ _
+
+4.3 Build your own U-Boot
+-------------------------
+Install and prepare a proper arm-v5te-gcc for ARM926EJ-S (see below, TOOLS
+AND LINKS) and define the environment variables:
+
+	$ export CROSS_COMPILE=arm-v5te-linux-gnueabi-
+	$ export ARCH=arm
+
+Config and build an default OXNAS U-Boot:
+
+	$ make oxnas_config
+	$ make
+
+Optional: Use the oxnas-tools (see below, TOOLS AND LINKS) to convert the
+U-Boot ELF file 'u-boot' into a strict compatible (-s) OXNAS boot package
+'u-boot.pkg.bin' that then will accepted by the on-chip bootrom:
+
+	$ mkoxnasblob -t U-Boot -s -o u-boot.pkg u-boot
+	OXNAS Tools 1.1.0 (Mar 05 2013 16:14:18)
+	Copyright (C) 2013 Li-Pro.Net
+	This is free software; see the source for copying conditions.  There is NO
+	warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+	--------------------------------------------------
+	GNU assembler (GNU Binutils) 2.21.1
+	Copyright 2011 Free Software Foundation, Inc.
+	arm-v5te-linux-gnueabi-as
+	arm-v5te-linux-gnueabi-objcopy
+	arm-v5te-linux-gnueabi-objdump
+	arm-v5te-linux-gnueabi-size
+	--------------------------------------------------
+	blob crc:       0xbfa5ef17 (precalculated)
+	--------------------------------------------------
+	payload addr:   0x48d00000 (unused)
+	payload size:   0xe644
+	payload crc:    0xc0094865
+	payload header: @0x00000030
+	payload data:   @0x0000003c
+
+Alternative: Use 'update_header' (see below, TOOLS AND LINKS) instead of
+'mkoxnasblob' to convert the U-Boot BIN file 'u-boot.bin' into a OXNAS boot
+package 'u-boot.pkg' that then will accepted by the on-chip bootrom
+(ARM/header.bin come from OxSemi boot tools):
+
+	$ cat ARM/header.bin > u-boot.pkg
+	$ cat u-boot.bin >> u-boot.pkg
+	$ update_header u-boot.pkg
+	size in header:0, size of file: 58948
+	New Image CRC:0xc0094865, hdr:0x00000000
+	New header CRC - crc:0xbfa5ef17 hdr:0x00000000
+
+
+5. TOOLS AND LINKS
+------------------
+
+5.1 Documentation
+-----------------
+Almost all of the technical documentation and development tools are
+protected by NDA:
+
+	http://www.plxtech.com/products/consumer/nas
+	http://www.plxtech.com/pdf/apps/ExpApp66_OXE810_Storage.pdf
+
+	http://www.plxtech.com/products/consumer/oxe810se
+	Product Brief: http://www.plxtech.com/download/file/726
+
+	http://www.plxtech.com/products/consumer/oxe810dse
+	Product Brief: http://www.plxtech.com/download/file/738
+
+5.2 Compiler toolchain
+----------------------
+For OXE800/OXE810 development you will need a ARM9 (armv5) compiler which
+supports the ARM9E/ARM9EJ (armv5te) extensions: ARM9TDMI pipeline, DSP
+instruction set extensions, and optional the Jazelle DBX (Direct Bytecode
+eXecution). The compiler should be at least a gcc-4.x.
+
+I prefer to use the OSELAS.Toolchain() by Pengutronix:
+
+	http://www.ptxdist.de/oselas/toolchain/index_en.html
+
+Download v2011.11.3 source package and read documentation to build the
+arm-v5te-linux-gnueabi-gcc with:
+
+	gcc-4.6.2, glibc-2.14.1, binutils-2.21.1a, kernel-2.6.39
+
+Alternatively install from DEB or RPM, see OpenSuse Build Service (OBS):
+
+	http://software.opensuse.org/download.html?\
+		project=home:rexut:OSELAS&\
+		package=toolchain-armv5te-2011
+
+5.3 OXNAS Tools
+---------------
+The latest version of oxnas-tools is 1.1.0 and can download from:
+
+  - http://www.li-pro.de/_media/embedded/oxnas/tools/oxnas-tools-1.1.0.tar.bz2
+
+The oxnas-tools provides command line tools to convert a given ELF file into
+a OXNAS boot package (mkoxnasblob) and to setup OXNAS master boot record with
+the OXNAS boot parameter blocks in a given hard disk image (setupoxnasmbr).
+
+5.4 OxSemi boot tools
+---------------------
+The OXNAS Tools were inspired by the 'update_header' binary from original
+OxSemi boot tools, part of their SDK (see above, OVERVIEW). You can find it
+in the SDK archive in folder 'src/boot/boot-tools'.
+
+
+6. HELP WANTED
+--------------
+
+There are plenty of areas where help is needed. Here are some ideas for
+those interested in contributing:
+
+  - port and test PCI setup code
+  - port and test OXNAS SATA driver
+  - port and test GEMAC driver
+  - port and test environment on disk
+  - port and test environment in flash
+  - Flash configuration
+  - Power button
+  - LED control
+  - USB driver
+  - contribute processor documentation
+  - donate hardware other than IOHMNHD (see list above, OVERVIEW)
+
+
+7. FUTURE AND OUTLOOK
+---------------------
+
+Review, refactor and supply the NAS782x (OX820) support, see:
+
+	https://github.com/WarheadsSE/uboot-ox820
+	https://github.com/ft-/OX820-uboot-2011.09
+
+
+Regards,
+
+--Stephan Linz
+<linz@li-pro.net>

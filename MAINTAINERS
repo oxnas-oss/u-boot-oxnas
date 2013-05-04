@@ -382,6 +382,10 @@ Rishi Bhattacharya <rishi@ti.com>
 
 	omap5912osk		ARM926EJS
 
+Stephan Linz <linz@li-pro.net>
+
+	oxnas			ARM926EJS
+
 David Müller <d.mueller@elsoft.ch>
 
 	smdk2410		ARM920T
