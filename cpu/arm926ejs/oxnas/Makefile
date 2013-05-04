@@ -26,7 +26,13 @@ include $(TOPDIR)/config.mk
 LIB	= $(obj)lib$(SOC).a
 
 COBJS-y	+= clock.o
+COBJS-y	+= mem.o
+COBJS-y	+= reset.o
 COBJS-y	+= timer.o
+
+ifndef CONFIG_SKIP_LOWLEVEL_INIT
+SOBJS-y := oxe$(CONFIG_OXNAS_CHIP)_lowlevel_init.o
+endif
 
 SRCS	:= $(SOBJS-y:.o=.S) $(COBJS-y:.o=.c)
 OBJS	:= $(addprefix $(obj),$(SOBJS-y) $(COBJS-y))
